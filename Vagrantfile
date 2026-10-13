@@ -221,6 +221,9 @@ SHELL
 # ---------------------------------------------------------------------------
 # Definición de la máquina virtual
 # ---------------------------------------------------------------------------
+# Fuerza VirtualBox como proveedor para obtener errores concretos si falla
+ENV["VAGRANT_DEFAULT_PROVIDER"] ||= "virtualbox"
+
 Vagrant.configure("2") do |config|
   config.vm.box      = VM_BOX
   config.vm.hostname = VM_NAME
