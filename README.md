@@ -97,6 +97,8 @@ top -p $(pgrep -f VBoxHeadless)
 watch "ls -al ~/VirtualBox\ VMs/agr-nodeserver/"
 ```
 
+Resultados y análisis: [`docs/consumo.md`](docs/consumo.md).
+
 ## Nota sobre el servidor
 
 `app.js` ya llama a `app.listen(3000)` y `bin/www` vuelve a escuchar en el
