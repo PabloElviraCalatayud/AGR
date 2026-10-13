@@ -1,0 +1,56 @@
+===== ANFITRION =====
+8
+               total        used        free      shared  buff/cache   available
+Mem:            30Gi       5.2Gi        20Gi       290Mi       5.9Gi        25Gi
+Swap:          8.0Gi          0B       8.0Gi
+CPU(s):                                  16
+Model name:                              AMD Ryzen 7 7700X 8-Core Processor
+CPU(s) scaling MHz:                      73%
+
+===== VERSIONES =====
+7.2.20r175154
+Vagrant 2.4.9
+
+===== DISCO VM EN ANFITRION =====
+2.1G	~/VirtualBox VMs/agr-nodeserver
+~/VirtualBox VMs/agr-nodeserver/Snapshots:
+total 2.1G
+-rw------- 1 2.1G Oct 13 21:15 {8041bf76-5630-4d46-9f3d-4d9935dd9c68}.vmdk
+811M	~/.vagrant.d/boxes/
+
+===== VM EN REPOSO =====
+    PID   RSS    VSZ %CPU %MEM     ELAPSED CMD
+  10423 1095328 3201216 3.4  3.4     56:19 /usr/lib/virtualbox/VBoxHeadless --comment agr-nodeserver ...
+agr-nodeserver  CPU/Load/User                            0.00%, 0.06%, 0.00%, 0.06%, 0.06%
+agr-nodeserver  CPU/Load/Kernel                          0.00%, 0.00%, 0.00%, 0.00%, 0.06%
+agr-nodeserver  RAM/Usage/Used                           1093860 kB (x5)
+agr-nodeserver  Guest/CPU/Load/User                      0.00% (x5)
+agr-nodeserver  Guest/CPU/Load/Kernel                    0.00% (x5)
+agr-nodeserver  Guest/RAM/Usage/Total                    980396 kB
+agr-nodeserver  Guest/RAM/Usage/Free                     719280 kB
+agr-nodeserver  Guest/RAM/Usage/Cache                    647532 kB
+ 21:18:06 up 58 min,  1 user,  load average: 0.04, 0.03, 0.01
+Mem:           957Mi       202Mi        69Mi       0.0Ki       685Mi       600Mi
+Swap:          2.9Gi       3.0Mi       2.9Gi
+/dev/mapper/ubuntu--vg-ubuntu--lv   31G  5.5G   24G  19% /
+820K	/opt/ssr-master-server/public/logs   (53 ficheros CSV)
+  RSS %CPU %MEM CMD
+86548  0.5  8.8 /usr/bin/node app.js
+
+===== VM CON CARGA (5000 peticiones) =====
+  10423 1097028 3201216 3.5  3.4
+agr-nodeserver  CPU/Load/User                            2.03%, 2.09%, 2.15%, 2.02%, 2.21%
+agr-nodeserver  CPU/Load/Kernel                          0.19%, 0.12%, 0.12%, 0.18%, 0.12%
+agr-nodeserver  RAM/Usage/Used                           1094116 kB .. 1095396 kB
+agr-nodeserver  Guest/CPU/Load/User                      5.00%, 19.00%, 17.00%, 15.00%, 17.00%
+agr-nodeserver  Guest/CPU/Load/Kernel                    4.00%, 9.00%, 7.00%, 8.00%, 7.00%
+top: %Cpu(s):  7.7 us, 15.4 sy, 76.9 id
+MiB Mem :    957.4 total,     71.1 free,    206.1 used,    680.3 buff/cache
+  19913 nodeapp   20   0 1265048  87860  54252 S  26.7   9.0   0:19.20 node
+Duracion carga: 40.883551254 s para 5000 peticiones
+
+===== DESPUES DE LA CARGA =====
+  10423 1104956 3266756 3.6  3.4
+2.1G	~/VirtualBox VMs/agr-nodeserver
+Mem:           957Mi       204Mi        60Mi       0.0Ki       692Mi       598Mi
+1.2M	/opt/ssr-master-server/public/logs
