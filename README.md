@@ -92,9 +92,13 @@ Detalles en `doc/entregables/memoria_parte2.pdf`.
 
 ## Documentación
 
-- `doc/entregables/memoria_parte1.pdf`: configuración, pruebas y estudio de
-  consumo de la parte 1.
-- `doc/entregables/memoria_parte2.pdf`: arquitectura, plan de numeración,
-  tablas de enrutamiento y plan de pruebas de la parte 2.
-- Para regenerar los PDF: `doc/build_pdf.sh` (requiere `pandoc` y
-  Chromium/Chrome).
+Todo en `doc/entregables/` (PDF) con sus fuentes Markdown en `doc/entregables/src/`:
+
+| Documento | Contenido |
+|---|---|
+| `manual_usuario` | Manual de uso: instalación, órdenes, pruebas y resolución de problemas de ambas partes |
+| `creacion_maquinas_virtuales` | Paso a paso de cómo se crean y configuran todas las VMs (Vagrant y KVM), con las órdenes manuales equivalentes |
+| `memoria_parte1` | Parte 1: configuración, pruebas y estudio de consumo |
+| `memoria_parte2` | Parte 2: arquitectura, plan de numeración, tablas de enrutamiento, plan de pruebas y resultados |
+
+Para regenerar los PDF: `doc/build_pdf.sh` (requiere `pandoc` y Chromium/Chrome).

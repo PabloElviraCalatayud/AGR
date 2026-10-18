@@ -1,4 +1,4 @@
-<domain type="qemu">
+<domain type="kvm">
   <name>agr-rb</name>
   <description>AGR lab 3103 - RB (router): ge0-0-5=10.1.0.2/30, ge0-0-1=10.2.0.1/30, ge0-0-4=10.3.0.1/30</description>
   <memory>393216</memory>

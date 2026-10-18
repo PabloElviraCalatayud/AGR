@@ -1,4 +1,4 @@
-<domain type="qemu">
+<domain type="kvm">
   <name>agr-pc2</name>
   <description>AGR lab 3103 - PC2 (pc): eth0=10.0.2.10/24</description>
   <memory>393216</memory>

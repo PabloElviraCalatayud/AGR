@@ -2,7 +2,7 @@
 
 | Carpeta | Contenido |
 |---|---|
-| `entregables/` | PDF finales que se entregan |
+| `entregables/` | PDF finales: manual de uso, creación de las VMs paso a paso y memorias de las partes 1 y 2 |
 | `entregables/src/` | Fuentes Markdown de las memorias, estilos e imágenes |
 | `development/enunciado/` | Enunciado de la práctica y plan de numeración del laboratorio 3103 |
 | `development/parte1/` | Medidas en bruto de la parte 1 (consumo de la VM) |

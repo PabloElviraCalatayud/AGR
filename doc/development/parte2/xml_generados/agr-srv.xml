@@ -1,4 +1,4 @@
-<domain type="qemu">
+<domain type="kvm">
   <name>agr-srv</name>
   <description>AGR lab 3103 - SRV (server): eth0=10.100.0.11/24</description>
   <memory>786432</memory>
