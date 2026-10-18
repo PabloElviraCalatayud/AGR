@@ -169,9 +169,76 @@ necesidad de red de gestión ni SSH:
 3. **Conectividad entre redes inferiores**: ping de cada PC a los otros tres.
 4. **Tablas de rutas** de los routers (`vtysh -c 'show ip route'`).
 
-RESULTADOS_PRUEBAS
+## 5.1. Resultados
 
-# 6. Configuraciones adicionales
+El plan se ejecutó sobre el despliegue completo (9 VMs). Resultado:
+**50/50 pruebas correctas**. El informe completo, con las tablas de rutas y
+los `traceroute`, está en `doc/development/parte2/pruebas.txt`.
+
+| Bloque | Pruebas | Correctas |
+|---|---|---|
+| Anfitrión → 17 interfaces + servidor web | 18 | 18 |
+| PCs → servidor (ping, HTTP, escritura, traceroute) | 16 | 16 |
+| Conectividad entre las 4 redes inferiores | 12 | 12 |
+| Tablas de rutas de RA–RD | 4 | 4 |
+
+Los `traceroute` confirman que los caminos son los del plano:
+
+| Origen | Saltos hasta 10.100.0.11 |
+|---|---|
+| PC1 (RED 1) | 10.0.1.1 (RC) → 10.2.0.1 (RB) → 10.1.0.1 (RA) → 10.100.0.11 |
+| PC2 (RED 2) | 10.0.2.1 (RC) → 10.2.0.1 (RB) → 10.1.0.1 (RA) → 10.100.0.11 |
+| PC3 (RED 3) | 10.0.3.1 (RD) → 10.3.0.1 (RB) → 10.1.0.1 (RA) → 10.100.0.11 |
+| PC4 (RED 4) | 10.0.4.1 (RD) → 10.3.0.1 (RB) → 10.1.0.1 (RA) → 10.100.0.11 |
+
+Tabla de rutas de RB obtenida con `vtysh -c 'show ip route'` (S = estática,
+C = conectada):
+
+```
+S>* 0.0.0.0/0 [1/0] via 10.1.0.1, ge0-0-5
+S>* 10.0.1.0/24 [1/0] via 10.2.0.2, ge0-0-1
+S>* 10.0.2.0/24 [1/0] via 10.2.0.2, ge0-0-1
+S>* 10.0.3.0/24 [1/0] via 10.3.0.2, ge0-0-4
+S>* 10.0.4.0/24 [1/0] via 10.3.0.2, ge0-0-4
+C>* 10.1.0.0/30 is directly connected, ge0-0-5
+C>* 10.2.0.0/30 is directly connected, ge0-0-1
+C>* 10.3.0.0/30 is directly connected, ge0-0-4
+```
+
+## 5.2. Incidencias detectadas y corregidas
+
+- **Rutas perdidas en los routers bajo carga.** Con todas las VMs arrancando a
+  la vez, `watchfrr` (el supervisor de FRR) consideró caído a `staticd` por
+  tardar más de 10 s en responder y lo reinició. Un demonio reiniciado por
+  separado no recibe la configuración, por lo que RC quedó sin ruta por
+  defecto (PC1 y PC2 sin conectividad). Solución: plazos de `watchfrr` más
+  amplios (`-t 60 -T 90`) y reaplicación de la configuración (`vtysh -b`) tras
+  arrancar FRR. Comprobado reiniciando los 4 routers simultáneamente.
+- **Espera insuficiente.** La orden `probar` esperaba sólo al servicio de red;
+  ahora espera además a que cada nodo tenga todas sus rutas instaladas.
+
+# 6. Consumo de recursos
+
+Medidas sobre el despliegue completo (9 VMs):
+
+| Recurso | Medida |
+|---|---|
+| Imagen base (`agr-base.qcow2`, 6 GB virtuales) | **1.26 GB** |
+| Disco diferencial de cada router | 22–23 MB |
+| Disco diferencial de cada PC / del servidor | 14–15 MB |
+| **Disco total de las 9 VMs** | **≈ 1.43 GB** |
+| RAM usada dentro de un router (de 384 MB) | ~120 MB |
+| RAM usada dentro de un PC (de 384 MB) | ~90 MB |
+| RAM usada dentro del servidor (de 768 MB) | ~220 MB |
+
+- Gracias a los discos diferenciales, las 9 VMs ocupan **menos que la única
+  VM de la parte 1** (2.1 GB de disco diferencial + 811 MB de *box*).
+- Igual que en la parte 1, al anfitrión cada VM le cuesta aproximadamente la
+  RAM asignada (el invitado usa la libre como caché). Con la asignación usada
+  (8 × 384 MB + 768 MB) la réplica reducida requiere **≈ 3.8 GB**, en línea
+  con la estimación de la parte 1 (≈ 3.1 GB con 256/512 MB).
+
+# 7. Configuraciones adicionales
 
 - **Interfaces con el nombre del plano** (`ge0-0-x`) e identificación por MAC,
   independiente del orden de detección PCI.
@@ -191,7 +258,7 @@ RESULTADOS_PRUEBAS
 - **Consolas**: `./agr_kvm.py consola rc` abre un `xterm` en segundo plano con
   `virsh console`.
 
-# 7. Uso del script
+# 8. Uso del script
 
 ```
 sudo apt install qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients \

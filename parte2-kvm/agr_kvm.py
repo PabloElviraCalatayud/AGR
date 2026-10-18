@@ -467,8 +467,11 @@ def esperar_agentes(topo, nombres, timeout):
         for n in sorted(pendientes):
             try:
                 qga(dominio(n), "guest-ping")
-                # agr-net.service debe haber terminado
-                code, _ = guest_exec(n, "systemctl is-active agr-net.service", 10)
+                # agr-net.service terminado y todas las rutas estáticas instaladas
+                # (en los routers las instala FRR unos segundos después)
+                rutas = len(topo["maquinas"][n]["rutas"])
+                code, _ = guest_exec(n, "systemctl is-active agr-net.service && "
+                                        f"[ $(ip route | grep -c ' via ') -ge {rutas} ]", 10)
                 if code == 0:
                     log.info("%s lista", n)
                     pendientes.discard(n)
@@ -520,8 +523,10 @@ def cmd_probar(topo, args):
         c, o = guest_exec(n, f"curl -s --max-time 5 '{url}record?id_nodo={n}&temperatura=21.5"
                              f"&humedad=40&co2=400&volatiles=10'")
         anotar(n, "HTTP GET /record (escritura de datos)", c == 0 and "Saving" in o)
-        c, o = guest_exec(n, f"traceroute -n -w 1 -q 1 {web['ip']}")
-        anotar(n, f"traceroute {web['ip']}", c == 0 and web["ip"] in o, o)
+        c, o = guest_exec(n, f"traceroute -n -w 2 -q 1 {web['ip']}")
+        # la cabecera también contiene la IP: se comprueba el último salto
+        ultimo = o.strip().splitlines()[-1] if o.strip() else ""
+        anotar(n, f"traceroute {web['ip']}", c == 0 and web["ip"] in ultimo, o)
 
     # 3. Conectividad entre las redes inferiores
     print("\n3) Conectividad entre PCs de distintas redes")

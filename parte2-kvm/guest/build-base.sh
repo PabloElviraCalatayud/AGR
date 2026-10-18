@@ -30,6 +30,16 @@ apt-get install -y -q --no-install-recommends \
 
 # staticd es el demonio de FRR que gestiona las rutas estáticas
 sed -i 's/^staticd=no/staticd=yes/' /etc/frr/daemons || true
+# watchfrr reinicia un demonio que tarda >10 s en responder y, al reiniciarlo
+# por separado, no le reaplica la configuración: en una máquina cargada se
+# pierden las rutas. Se amplían los plazos y se reaplica la configuración
+# (vtysh -b) una vez arrancado FRR.
+sed -i 's/^#*watchfrr_options=.*/watchfrr_options="-t 60 -T 90"/' /etc/frr/daemons
+mkdir -p /etc/systemd/system/frr.service.d
+cat > /etc/systemd/system/frr.service.d/agr.conf <<'EOF'
+[Service]
+ExecStartPost=/bin/sh -c 'for i in $(seq 1 30); do vtysh -c "show version" >/dev/null 2>&1 && break; sleep 2; done; sleep 3; vtysh -b >/dev/null 2>&1 || true'
+EOF
 systemctl disable frr.service
 
 echo ">>> Node.js (binarios oficiales)"
