@@ -1,3 +1,7 @@
 .vagrant/
 *.log
 ubuntu-*-cloudimg-console.log
+__pycache__/
+parte2-kvm/xml_generados/
+*.qcow2
+*.img

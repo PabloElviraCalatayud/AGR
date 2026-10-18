@@ -1,0 +1,19 @@
+Medidas en el anfitrión (AMD Ryzen 7 7700X, 30 GiB RAM, Ubuntu 24.04, KVM)
+con las 9 VMs de la parte 2 en ejecución.
+
+$ ps -eo rss,args | grep "[g]uest=agr" | awk '{print $1/1024 " MiB"}'
+(orden de los procesos = orden de creación: ra, rb, rc, rd, srv, pc1, pc2, pc3, pc4)
+405.992 MiB
+408.164 MiB
+405.715 MiB
+405.359 MiB
+456.062 MiB
+390.172 MiB
+392.004 MiB
+390.141 MiB
+396.922 MiB
+
+$ free -h
+               total        used        free      shared  buff/cache   available
+Mem:            30Gi       8.2Gi        17Gi       706Mi       6.4Gi        22Gi
+Swap:          8.0Gi          0B       8.0Gi

@@ -1,0 +1,95 @@
+{
+  "_comentario": "Plan de numeración del laboratorio 3103 (doc/development/enunciado/plan_numeracion_3103.pdf). Cada red es un bridge Linux en el anfitrión. Las cuatro redes inferiores tienen un PC cada una.",
+  "redes": {
+    "srv":  {"bridge": "agr-srv",  "cidr": "10.100.0.0/24", "descripcion": "Red de servidores (RA ge0/0/3)"},
+    "prof": {"bridge": "agr-prof", "cidr": "10.200.0.0/30", "descripcion": "PC Profesor = anfitrión (RA ge0/0/5)",
+             "anfitrion": "10.200.0.2/30"},
+    "ab":   {"bridge": "agr-ab",   "cidr": "10.1.0.0/30",   "descripcion": "Enlace RA - RB"},
+    "bc":   {"bridge": "agr-bc",   "cidr": "10.2.0.0/30",   "descripcion": "Enlace RB - RC"},
+    "bd":   {"bridge": "agr-bd",   "cidr": "10.3.0.0/30",   "descripcion": "Enlace RB - RD"},
+    "red1": {"bridge": "agr-red1", "cidr": "10.0.1.0/24",   "descripcion": "RED 1 (SW1)"},
+    "red2": {"bridge": "agr-red2", "cidr": "10.0.2.0/24",   "descripcion": "RED 2 (SW2)"},
+    "red3": {"bridge": "agr-red3", "cidr": "10.0.3.0/24",   "descripcion": "RED 3 (SW3)"},
+    "red4": {"bridge": "agr-red4", "cidr": "10.0.4.0/24",   "descripcion": "RED 4 (SW4)"}
+  },
+  "maquinas": {
+    "ra": {
+      "rol": "router", "memoria_mb": 384, "vcpus": 1,
+      "interfaces": [
+        {"nombre": "ge0-0-3", "red": "srv",  "ip": "10.100.0.1/24"},
+        {"nombre": "ge0-0-5", "red": "prof", "ip": "10.200.0.1/30"},
+        {"nombre": "ge0-0-1", "red": "ab",   "ip": "10.1.0.1/30"}
+      ],
+      "rutas": [
+        ["0.0.0.0/0", "10.1.0.2"]
+      ]
+    },
+    "rb": {
+      "rol": "router", "memoria_mb": 384, "vcpus": 1,
+      "interfaces": [
+        {"nombre": "ge0-0-5", "red": "ab", "ip": "10.1.0.2/30"},
+        {"nombre": "ge0-0-1", "red": "bc", "ip": "10.2.0.1/30"},
+        {"nombre": "ge0-0-4", "red": "bd", "ip": "10.3.0.1/30"}
+      ],
+      "rutas": [
+        ["10.0.1.0/24", "10.2.0.2"],
+        ["10.0.2.0/24", "10.2.0.2"],
+        ["10.0.3.0/24", "10.3.0.2"],
+        ["10.0.4.0/24", "10.3.0.2"],
+        ["0.0.0.0/0",   "10.1.0.1"]
+      ]
+    },
+    "rc": {
+      "rol": "router", "memoria_mb": 384, "vcpus": 1,
+      "interfaces": [
+        {"nombre": "ge0-0-5", "red": "bc",   "ip": "10.2.0.2/30"},
+        {"nombre": "ge0-0-1", "red": "red1", "ip": "10.0.1.1/24"},
+        {"nombre": "ge0-0-2", "red": "red2", "ip": "10.0.2.1/24"}
+      ],
+      "rutas": [
+        ["0.0.0.0/0", "10.2.0.1"]
+      ]
+    },
+    "rd": {
+      "rol": "router", "memoria_mb": 384, "vcpus": 1,
+      "interfaces": [
+        {"nombre": "ge0-0-5", "red": "bd",   "ip": "10.3.0.2/30"},
+        {"nombre": "ge0-0-3", "red": "red3", "ip": "10.0.3.1/24"},
+        {"nombre": "ge0-0-4", "red": "red4", "ip": "10.0.4.1/24"}
+      ],
+      "rutas": [
+        ["0.0.0.0/0", "10.3.0.1"]
+      ]
+    },
+    "srv": {
+      "rol": "server", "memoria_mb": 768, "vcpus": 1,
+      "interfaces": [
+        {"nombre": "eth0", "red": "srv", "ip": "10.100.0.11/24"}
+      ],
+      "rutas": [
+        ["0.0.0.0/0", "10.100.0.1"]
+      ]
+    },
+    "pc1": {
+      "rol": "pc", "memoria_mb": 384, "vcpus": 1,
+      "interfaces": [{"nombre": "eth0", "red": "red1", "ip": "10.0.1.10/24"}],
+      "rutas": [["0.0.0.0/0", "10.0.1.1"]]
+    },
+    "pc2": {
+      "rol": "pc", "memoria_mb": 384, "vcpus": 1,
+      "interfaces": [{"nombre": "eth0", "red": "red2", "ip": "10.0.2.10/24"}],
+      "rutas": [["0.0.0.0/0", "10.0.2.1"]]
+    },
+    "pc3": {
+      "rol": "pc", "memoria_mb": 384, "vcpus": 1,
+      "interfaces": [{"nombre": "eth0", "red": "red3", "ip": "10.0.3.10/24"}],
+      "rutas": [["0.0.0.0/0", "10.0.3.1"]]
+    },
+    "pc4": {
+      "rol": "pc", "memoria_mb": 384, "vcpus": 1,
+      "interfaces": [{"nombre": "eth0", "red": "red4", "ip": "10.0.4.10/24"}],
+      "rutas": [["0.0.0.0/0", "10.0.4.1"]]
+    }
+  },
+  "servicio_web": {"maquina": "srv", "ip": "10.100.0.11", "puerto": 3000}
+}
