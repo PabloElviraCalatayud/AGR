@@ -355,6 +355,13 @@ def cmd_crear(topo, args):
     comprobar_entorno()
     sh(["systemctl", "start", "libvirtd"], check=False, capture=True)
     args.dir.mkdir(parents=True, exist_ok=True)
+    # QEMU se ejecuta como libvirt-qemu: necesita poder atravesar la ruta
+    for d in [args.dir.resolve(), *args.dir.resolve().parents]:
+        if not os.stat(d).st_mode & 0o001:
+            log.warning("%s no es accesible para libvirt-qemu (permisos %o); las VMs "
+                        "no podrán leer sus discos. Use --dir en /var/lib/libvirt/images.",
+                        d, os.stat(d).st_mode & 0o777)
+            break
     base = imagen_base(args)
     crear_bridges(topo)
     for idx, (nombre, m) in enumerate(topo["maquinas"].items(), 1):
