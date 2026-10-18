@@ -77,7 +77,7 @@ como PC del profesor (10.200.0.2).
 
 ```bash
 sudo apt install qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients \
-                 libguestfs-tools dhcpcd-base python3-lxml xterm
+                 libguestfs-tools isc-dhcp-client python3-lxml xterm
 cd parte2-kvm
 sudo ./agr_kvm.py crear          # imagen base + bridges + 9 VMs
 sudo ./agr_kvm.py probar         # plan de pruebas de conectividad

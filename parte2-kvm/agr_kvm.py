@@ -85,7 +85,7 @@ def comprobar_entorno():
     if faltan:
         sys.exit("Faltan herramientas: " + ", ".join(faltan) + "\n"
                  "  sudo apt install qemu-system-x86 qemu-utils libvirt-daemon-system "
-                 "libvirt-clients libguestfs-tools dhcpcd-base python3-lxml xterm")
+                 "libvirt-clients libguestfs-tools isc-dhcp-client python3-lxml xterm")
     if not Path("/dev/kvm").exists():
         log.warning("/dev/kvm no existe: se usará emulación software (TCG), mucho "
                     "más lenta. Compruebe la virtualización en la BIOS y que el "

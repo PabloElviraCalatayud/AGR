@@ -195,7 +195,7 @@ RESULTADOS_PRUEBAS
 
 ```
 sudo apt install qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients \
-                 libguestfs-tools dhcpcd-base python3-lxml xterm
+                 libguestfs-tools isc-dhcp-client python3-lxml xterm
 cd parte2-kvm
 sudo ./agr_kvm.py crear                 # despliega todo (la 1ª vez crea la imagen base)
 sudo ./agr_kvm.py estado
