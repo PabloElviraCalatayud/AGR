@@ -219,24 +219,61 @@ C>* 10.3.0.0/30 is directly connected, ge0-0-4
 
 # 6. Consumo de recursos
 
-Medidas sobre el despliegue completo (9 VMs):
+Medidas sobre el despliegue completo (9 VMs) en el anfitrión de prácticas
+(AMD Ryzen 7 7700X, 30 GiB de RAM, Ubuntu 24.04, KVM). Datos en bruto en
+`doc/development/parte2/consumo_kvm_raw.txt`.
+
+## 6.1. Memoria
+
+RAM real de cada proceso QEMU en el anfitrión (RSS):
+
+| VM | RAM asignada | RSS en el anfitrión | RAM usada dentro de la VM |
+|---|---|---|---|
+| RA | 384 MB | 406 MiB | ~120 MB |
+| RB | 384 MB | 408 MiB | ~120 MB |
+| RC | 384 MB | 406 MiB | ~120 MB |
+| RD | 384 MB | 405 MiB | ~120 MB |
+| SRV | 768 MB | 456 MiB | ~220 MB |
+| PC1 | 384 MB | 390 MiB | ~90 MB |
+| PC2 | 384 MB | 392 MiB | ~90 MB |
+| PC3 | 384 MB | 390 MiB | ~90 MB |
+| PC4 | 384 MB | 397 MiB | ~90 MB |
+| **Total** | **3840 MB** | **3651 MiB (3.6 GiB)** | ~1.1 GB |
+
+- Cada VM de 384 MB cuesta al anfitrión **~400 MiB**: toda su RAM (el
+  invitado usa la libre como caché de disco) más **~20 MiB de sobrecarga** de
+  QEMU, bastante menos que los ~70 MiB de VirtualBox en la parte 1.
+- El servidor, con 768 MB asignados, sólo ocupa **456 MiB**: KVM únicamente
+  reserva las páginas que el invitado llega a tocar, y el servidor nunca ha
+  necesitado toda su RAM.
+- El laboratorio completo (9 VMs) ocupa **3.6 GiB**, el **12 %** de la RAM
+  del anfitrión, lo que confirma la estimación de la parte 1 (≈ 3.1 GiB con
+  256/512 MB por VM). Con el uso real de los invitados (~1.1 GB) se podrían
+  reducir las asignaciones casi a la mitad.
+
+## 6.2. Disco
 
 | Recurso | Medida |
 |---|---|
 | Imagen base (`agr-base.qcow2`, 6 GB virtuales) | **1.26 GB** |
 | Disco diferencial de cada router | 22–23 MB |
-| Disco diferencial de cada PC / del servidor | 14–15 MB |
+| Disco diferencial de cada PC y del servidor | 14–15 MB |
 | **Disco total de las 9 VMs** | **≈ 1.43 GB** |
-| RAM usada dentro de un router (de 384 MB) | ~120 MB |
-| RAM usada dentro de un PC (de 384 MB) | ~90 MB |
-| RAM usada dentro del servidor (de 768 MB) | ~220 MB |
 
-- Gracias a los discos diferenciales, las 9 VMs ocupan **menos que la única
-  VM de la parte 1** (2.1 GB de disco diferencial + 811 MB de *box*).
-- Igual que en la parte 1, al anfitrión cada VM le cuesta aproximadamente la
-  RAM asignada (el invitado usa la libre como caché). Con la asignación usada
-  (8 × 384 MB + 768 MB) la réplica reducida requiere **≈ 3.8 GB**, en línea
-  con la estimación de la parte 1 (≈ 3.1 GB con 256/512 MB).
+Gracias a los discos diferenciales, las 9 VMs ocupan **menos que la única VM
+de la parte 1** (2.1 GB de disco diferencial + 811 MB de *box*).
+
+## 6.3. Extrapolación
+
+| Escenario | VMs | RAM (≈ 400 MiB por VM) | Disco |
+|---|---|---|---|
+| Réplica reducida (desplegada) | 9 | 3.6 GiB | 1.4 GB |
+| Réplica completa (32 PC + 2 servidores) | 38 | ~15 GiB | ~2 GB |
+| Servidor comercial de 1 TB de RAM | ~2300 VMs | ≈ 60 réplicas completas | — |
+
+Frente a la parte 1 (≈ 1.07 GiB por VM de 1 GB con VirtualBox), la combinación
+KVM + discos diferenciales + asignación ajustada multiplica por ~2.7 el número
+de VMs por GB de RAM y por ~18 el de VMs por GB de disco (0.34 VMs/GB en la parte 1 frente a 6.3 VMs/GB aquí).
 
 # 7. Configuraciones adicionales
 
