@@ -1,0 +1,14 @@
+[Unit]
+Description=Red del laboratorio 3103 (AGR)
+DefaultDependencies=no
+After=systemd-udevd.service local-fs.target
+Before=network-pre.target network.target frr.service ssr-server.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/agr-net.sh
+
+[Install]
+WantedBy=multi-user.target

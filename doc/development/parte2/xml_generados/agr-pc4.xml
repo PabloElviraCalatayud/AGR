@@ -1,0 +1,45 @@
+<domain type="qemu">
+  <name>agr-pc4</name>
+  <description>AGR lab 3103 - PC4 (pc): eth0=10.0.4.10/24</description>
+  <memory>393216</memory>
+  <currentMemory>393216</currentMemory>
+  <vcpu>1</vcpu>
+  <os>
+    <type arch="x86_64">hvm</type>
+    <boot dev="hd"/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <pae/>
+  </features>
+  <clock offset="utc"/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>restart</on_crash>
+  <devices>
+    <emulator>/usr/bin/kvm</emulator>
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2"/>
+      <source file="/var/lib/libvirt/images/agr/pc4.qcow2"/>
+      <target dev="vda" bus="virtio"/>
+    </disk>
+    <interface type="bridge">
+      <mac address="52:54:00:aa:09:00"/>
+      <source bridge="agr-red4"/>
+      <target dev="pc4-eth0"/>
+      <model type="virtio"/>
+    </interface>
+    <serial type="pty">
+      <target port="0"/>
+    </serial>
+    <console type="pty">
+      <target type="serial" port="0"/>
+    </console>
+    <input type="mouse" bus="ps2"/>
+    <graphics type="vnc" port="-1" autoport="yes" keymap="es"/>
+    <channel type="unix">
+      <target type="virtio" name="org.qemu.guest_agent.0"/>
+    </channel>
+  </devices>
+</domain>
