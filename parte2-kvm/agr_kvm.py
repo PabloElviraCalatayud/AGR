@@ -6,19 +6,22 @@ AGR - Práctica 2 (parte 2). Despliega, a partir de topologia.json y de la
 plantilla XML de libvirt (plantilla_vm.xml):
 
   * Un bridge Linux en el anfitrión por cada red del plano de numeración.
-  * Una imagen base común (Ubuntu 24.04 cloud o la imagen de Moodle) con FRR
-    (Software Routing Suite), Node.js y el servidor SSR-master-server.
+  * Una imagen base común, construida a partir de la imagen de Moodle
+    (Ubuntu 20.04), con FRR (Software Routing Suite), Node.js y el servidor
+    SSR-master-server.
   * Un disco qcow2 diferencial por máquina, configurado offline con
     virt-customize (hostname, direcciones IP, rutas estáticas de FRR...).
   * Un XML por máquina generado con lxml y definido/arrancado con virsh.
   * El anfitrión hace de "PC Profesor" (10.200.0.2) con rutas hacia el lab.
 
 Uso (como root):
+  sudo ./agr_kvm.py instalar       # dependencias del anfitrión (una vez)
   sudo ./agr_kvm.py crear          # todo: imagen base, bridges, VMs y arranque
   sudo ./agr_kvm.py estado
   sudo ./agr_kvm.py probar         # plan de pruebas de conectividad
   sudo ./agr_kvm.py consola rc     # xterm con 'virsh console agr-rc'
   sudo ./agr_kvm.py parar | arrancar
+  sudo ./agr_kvm.py consumo        # RAM, CPU y disco de cada VM
   sudo ./agr_kvm.py destruir [--todo]
 
 Ejecute './agr_kvm.py -h' o './agr_kvm.py <orden> -h' para más opciones.
@@ -38,19 +41,29 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-try:
-    from lxml import etree
-except ImportError:
-    sys.exit("Falta lxml: sudo apt install python3-lxml")
 
 AQUI = Path(__file__).resolve().parent
 GUEST = AQUI / "guest"
 PREFIJO = "agr-"                      # prefijo de los dominios libvirt
-URL_IMAGEN = ("https://cloud-images.ubuntu.com/minimal/releases/noble/release/"
-              "ubuntu-24.04-minimal-cloudimg-amd64.img")
+# Imagen de Moodle (Ubuntu 20.04, root/agr): copia local no versionada en
+# parte2-kvm/imagen/ o, si no existe, se descarga del Release del repositorio
+IMAGEN_MOODLE = AQUI / "imagen" / "agr-vm-base.qcow2"
+URL_IMAGEN_MOODLE = ("https://github.com/PabloElviraCalatayud/AGR/releases/download/"
+                     "imagen-moodle/agr-vm-base.qcow2")
+# Alternativa (--imagen-base ubuntu): imagen cloud oficial de Ubuntu 24.04
+URL_IMAGEN_UBUNTU = ("https://cloud-images.ubuntu.com/minimal/releases/noble/release/"
+                     "ubuntu-24.04-minimal-cloudimg-amd64.img")
+DEPENDENCIAS = ["qemu-system-x86", "qemu-utils", "libvirt-daemon-system", "libvirt-clients",
+                "libguestfs-tools", "isc-dhcp-client", "python3-lxml", "xterm",
+                "iputils-ping", "traceroute", "curl"]
 CONTRASENA_ROOT = "agr"
 DIR_TRABAJO = Path("/var/lib/libvirt/images/agr")
 TAMANO_DISCO = "6G"
+
+# Amplía la partición raíz y su sistema de ficheros al nuevo tamaño del disco
+AMPLIAR_RAIZ = ("R=$(findmnt -n -o SOURCE /); D=/dev/$(lsblk -no PKNAME $R); "
+                "N=$(cat /sys/class/block/$(basename $R)/partition); "
+                "growpart $D $N && resize2fs $R || true")
 
 log = logging.getLogger("agr_kvm")
 
@@ -77,24 +90,56 @@ def info(msg):
     print(f"\033[1;36m>>>\033[0m {msg}", flush=True)
 
 
-def comprobar_entorno():
+def comprobar_root():
     if os.geteuid() != 0:
         sys.exit("Ejecute el script como root (sudo).")
+
+
+def comprobar_entorno():
+    """Comprueba dependencias y deja el anfitrión listo para KVM."""
+    comprobar_root()
     faltan = [c for c in ("virsh", "qemu-img", "virt-customize", "ip")
               if shutil.which(c) is None]
     if faltan:
         sys.exit("Faltan herramientas: " + ", ".join(faltan) + "\n"
-                 "  sudo apt install qemu-system-x86 qemu-utils libvirt-daemon-system "
-                 "libvirt-clients libguestfs-tools isc-dhcp-client python3-lxml xterm")
-    if not Path("/dev/kvm").exists():
-        log.warning("/dev/kvm no existe: se usará emulación software (TCG), mucho "
-                    "más lenta. Compruebe la virtualización en la BIOS y que el "
-                    "módulo kvm_intel/kvm_amd está cargado.")
-    if Path("/sys/module/vboxdrv").exists():
-        log.warning("VirtualBox (vboxdrv) está cargado; si hay VMs de VirtualBox "
-                    "encendidas, KVM puede fallar. Apáguelas (vagrant halt).")
+                 "  Instálelas con: sudo ./agr_kvm.py instalar")
+    preparar_hipervisor()
     # libguestfs no necesita libvirt para manipular imágenes
     os.environ.setdefault("LIBGUESTFS_BACKEND", "direct")
+
+
+def preparar_hipervisor():
+    """VirtualBox fuera, módulo KVM cargado y libvirtd en marcha."""
+    # VirtualBox y KVM no pueden usar VT-x/AMD-V a la vez
+    if Path("/sys/module/vboxdrv").exists():
+        r = sh(["modprobe", "-r", "vboxnetadp", "vboxnetflt", "vboxdrv"], check=False, capture=True)
+        if r.returncode == 0:
+            log.info("Módulos de VirtualBox descargados")
+        else:
+            log.warning("VirtualBox está en uso (¿VM de la parte 1 encendida? -> vagrant halt); "
+                        "KVM puede fallar")
+    if not Path("/dev/kvm").exists():
+        cpu = Path("/proc/cpuinfo").read_text()
+        modulo = "kvm_amd" if " svm" in cpu else "kvm_intel" if " vmx" in cpu else None
+        if modulo:
+            sh(["modprobe", modulo], check=False, capture=True)
+        if Path("/dev/kvm").exists():
+            log.info("Módulo %s cargado", modulo)
+        else:
+            log.warning("/dev/kvm no existe: se usará emulación software (TCG), mucho más "
+                        "lenta. Active la virtualización (VT-x/AMD-V) en la BIOS.")
+    sh(["systemctl", "start", "libvirtd"], check=False, capture=True)
+
+
+def cmd_instalar(topo, args):
+    """Instala las dependencias del anfitrión (Debian/Ubuntu)."""
+    comprobar_root()
+    info("Instalando dependencias: " + " ".join(DEPENDENCIAS))
+    env = dict(os.environ, DEBIAN_FRONTEND="noninteractive")
+    sh(["apt-get", "update"], env=env)
+    sh(["apt-get", "install", "-y", *DEPENDENCIAS], env=env)
+    sh(["systemctl", "enable", "--now", "libvirtd"], check=False)
+    print("Dependencias instaladas. Siguiente paso: sudo ./agr_kvm.py crear")
 
 
 def cargar_topologia(ruta):
@@ -163,6 +208,39 @@ def borrar_bridges(topo):
 # --------------------------------------------------------------------------
 # Imágenes
 # --------------------------------------------------------------------------
+def descargar(url, destino):
+    info(f"Descargando {url}")
+    parte = destino.with_suffix(".part")
+    r = sh(["curl", "-fL", "--progress-bar", "-o", parte, url], check=False)
+    if r.returncode != 0:
+        parte.unlink(missing_ok=True)
+        return False
+    parte.rename(destino)
+    return True
+
+
+def imagen_origen(args):
+    """Imagen de partida: --imagen-base, imagen de Moodle local o del Release."""
+    if args.imagen_base == "ubuntu":
+        origen = args.dir / Path(URL_IMAGEN_UBUNTU).name
+        if not origen.exists() and not descargar(URL_IMAGEN_UBUNTU, origen):
+            sys.exit("No se pudo descargar la imagen de Ubuntu")
+        return origen
+    if args.imagen_base:
+        origen = Path(args.imagen_base).resolve()
+        if not origen.exists():
+            sys.exit(f"No existe la imagen {origen}")
+        return origen
+    if IMAGEN_MOODLE.exists():
+        return IMAGEN_MOODLE
+    cache = args.dir / IMAGEN_MOODLE.name
+    if cache.exists() or descargar(URL_IMAGEN_MOODLE, cache):
+        return cache
+    sys.exit(f"No se encuentra la imagen de Moodle. Cópiela en {IMAGEN_MOODLE}\n"
+             f"(o súbala al Release 'imagen-moodle' del repositorio, o indique otra con "
+             f"--imagen-base RUTA; '--imagen-base ubuntu' usa Ubuntu 24.04 cloud)")
+
+
 def imagen_base(args):
     """Crea (una vez) la imagen base con todo el software instalado."""
     base = args.dir / "agr-base.qcow2"
@@ -170,15 +248,8 @@ def imagen_base(args):
         log.info("Imagen base existente: %s", base)
         return base
 
-    if args.imagen_base:
-        origen = Path(args.imagen_base).resolve()
-        info(f"Usando imagen proporcionada: {origen}")
-    else:
-        origen = args.dir / Path(URL_IMAGEN).name
-        if not origen.exists():
-            info(f"Descargando {URL_IMAGEN}")
-            sh(["curl", "-fL", "--progress-bar", "-o", origen.with_suffix(".part"), URL_IMAGEN])
-            origen.with_suffix(".part").rename(origen)
+    origen = imagen_origen(args)
+    info(f"Imagen de partida: {origen}")
 
     info("Construyendo la imagen base (FRR, Node.js, servidor web). Tarda unos minutos...")
     tmp = base.with_suffix(".tmp")
@@ -187,7 +258,7 @@ def imagen_base(args):
     sh(["qemu-img", "resize", tmp, TAMANO_DISCO])
     env_proxy = f"AGR_PROXY={args.proxy} " if args.proxy else ""
     cmd = ["virt-customize", "-a", tmp, "--network",
-           "--run-command", "growpart /dev/sda 1 && resize2fs /dev/sda1 || true",
+           "--run-command", AMPLIAR_RAIZ,
            "--root-password", f"password:{CONTRASENA_ROOT}",
            "--timezone", "Europe/Madrid",
            "--upload", f"{GUEST / 'agr-net.sh'}:/usr/local/sbin/agr-net.sh",
@@ -286,6 +357,10 @@ def crear_disco(nombre, idx, m, topo, base, args):
 # XML de libvirt
 # --------------------------------------------------------------------------
 def generar_xml(nombre, idx, m, topo, disco, plantilla):
+    try:
+        from lxml import etree
+    except ImportError:
+        sys.exit("Falta lxml. Instale las dependencias con: sudo ./agr_kvm.py instalar")
     arbol = etree.parse(str(plantilla), etree.XMLParser(remove_blank_text=True))
     raiz = arbol.getroot()
     if not Path("/dev/kvm").exists():
@@ -353,7 +428,6 @@ def cmd_xml(topo, args):
 
 def cmd_crear(topo, args):
     comprobar_entorno()
-    sh(["systemctl", "start", "libvirtd"], check=False, capture=True)
     args.dir.mkdir(parents=True, exist_ok=True)
     # QEMU se ejecuta como libvirt-qemu: necesita poder atravesar la ruta
     for d in [args.dir.resolve(), *args.dir.resolve().parents]:
@@ -391,14 +465,31 @@ def cmd_arrancar(topo, args):
         print(f"{dominio(n)}: {'arrancada' if r.returncode == 0 else r.stderr.strip()}")
 
 
+def liberar_kvm():
+    """Descarga KVM si ya no hay VMs encendidas, para poder usar VirtualBox."""
+    if virsh("list", "--name", check=False).stdout.strip():
+        return
+    for m in ("kvm_amd", "kvm_intel", "kvm"):
+        if Path(f"/sys/module/{m}").exists():
+            sh(["modprobe", "-r", m], check=False, capture=True)
+    if not Path("/sys/module/kvm").exists():
+        log.info("KVM descargado: ya se puede usar VirtualBox (parte 1)")
+
+
 def cmd_parar(topo, args):
+    comprobar_root()
     for n in maquinas_sel(topo, args):
         virsh("shutdown", dominio(n), check=False)
         print(f"{dominio(n)}: apagando")
+    # Espera (máx. 2 min) a que se apaguen y libera KVM
+    fin = time.time() + 120
+    while virsh("list", "--name", check=False).stdout.strip() and time.time() < fin:
+        time.sleep(2)
+    liberar_kvm()
 
 
 def cmd_destruir(topo, args):
-    comprobar_entorno()
+    comprobar_root()
     for n in maquinas_sel(topo, args):
         virsh("destroy", dominio(n), check=False)
         virsh("undefine", dominio(n), check=False)
@@ -410,6 +501,7 @@ def cmd_destruir(topo, args):
     if args.todo:
         shutil.rmtree(args.dir, ignore_errors=True)
         print(f"Eliminado {args.dir} (imagen base incluida)")
+    liberar_kvm()
 
 
 def cmd_estado(topo, args):
@@ -419,6 +511,62 @@ def cmd_estado(topo, args):
         estado = r.stdout.strip() if r.returncode == 0 else "no definida"
         itfs = "  ".join(f"{i['nombre']}={i['ip']}" for i in m["interfaces"])
         print(f"{n.upper():<10}{estado:<14}{m['rol']:<8}{m['memoria_mb']:>4}MB  {itfs}")
+
+
+def rss_qemu():
+    """RSS (KiB) del proceso QEMU de cada dominio, leído de /proc."""
+    rss = {}
+    for d in Path("/proc").iterdir():
+        if not d.name.isdigit():
+            continue
+        try:
+            cmdline = (d / "cmdline").read_bytes().split(b"\0")
+            status = (d / "status").read_text()
+        except OSError:
+            continue
+        for arg in cmdline:
+            if arg.startswith(b"guest=" + PREFIJO.encode()):
+                nombre = arg.split(b"=", 1)[1].split(b",")[0].decode()
+                kib = next(int(l.split()[1]) for l in status.splitlines() if l.startswith("VmRSS"))
+                rss[nombre] = kib
+    return rss
+
+
+def cmd_consumo(topo, args):
+    """Memoria, CPU y disco de cada VM vistos desde el anfitrión."""
+    comprobar_root()
+    rss = rss_qemu()
+    filas, total_rss, total_disco = [], 0, 0
+    for n, m in topo["maquinas"].items():
+        dom = dominio(n)
+        disco = args.dir / f"{n}.qcow2"
+        mb_disco = disco.stat().st_blocks * 512 / 2**20 if disco.exists() else 0
+        cpu = ""
+        r = virsh("domstats", dom, "--cpu-total", check=False)
+        for l in r.stdout.splitlines():
+            if "cpu.time=" in l:
+                cpu = f"{int(l.split('=')[1]) / 1e9:.1f} s"
+        kib = rss.get(dom, 0)
+        total_rss += kib
+        total_disco += mb_disco
+        filas.append(f"{n.upper():<6}{m['memoria_mb']:>9} MB{kib / 1024:>12.0f} MiB"
+                     f"{mb_disco:>12.1f} MB{cpu:>12}")
+    base = args.dir / "agr-base.qcow2"
+    mb_base = base.stat().st_blocks * 512 / 2**20 if base.exists() else 0
+    mem = {l.split(":")[0]: int(l.split()[1]) for l in Path("/proc/meminfo").read_text().splitlines()}
+    lineas = [f"Consumo - {datetime.now():%Y-%m-%d %H:%M:%S}", "",
+              f"{'VM':<6}{'RAM asig.':>12}{'RSS anfitr.':>16}{'Disco':>15}{'CPU':>12}",
+              *filas,
+              f"{'TOTAL':<6}{'':>12}{total_rss / 1024:>12.0f} MiB{total_disco:>12.1f} MB",
+              "",
+              f"Imagen base compartida: {mb_base:.0f} MB  ->  disco total {mb_base + total_disco:.0f} MB",
+              f"RAM del anfitrión: {mem['MemTotal'] / 2**20:.1f} GiB total, "
+              f"{(mem['MemTotal'] - mem['MemAvailable']) / 2**20:.1f} GiB en uso, "
+              f"VMs = {total_rss / mem['MemTotal'] * 100:.1f} %"]
+    print("\n".join(lineas))
+    if args.informe:
+        Path(args.informe).write_text("\n".join(lineas) + "\n")
+        print(f"Informe guardado en {args.informe}")
 
 
 def cmd_consola(topo, args):
@@ -566,9 +714,13 @@ def main():
                    help=f"directorio de imágenes y XML (por defecto {DIR_TRABAJO})")
     sub = p.add_subparsers(dest="orden", required=True)
 
+    s = sub.add_parser("instalar", help="instala las dependencias del anfitrión (apt)")
+    s.set_defaults(func=cmd_instalar)
+
     s = sub.add_parser("crear", help="crea imagen base, bridges y máquinas, y las arranca")
     s.add_argument("maquinas", nargs="*", help="sólo estas máquinas (por defecto todas)")
-    s.add_argument("--imagen-base", help="qcow2 de partida (p. ej. la imagen de Moodle)")
+    s.add_argument("--imagen-base", help="qcow2 de partida (por defecto la imagen de Moodle "
+                   "en imagen/agr-vm-base.qcow2); 'ubuntu' = Ubuntu 24.04 cloud")
     s.add_argument("--reconstruir-base", action="store_true", help="rehace la imagen base")
     s.add_argument("--proxy", help="proxy HTTP(S) para descargar paquetes en la imagen base")
     s.add_argument("--espera", type=int, default=300, help="segundos de espera al arranque")
@@ -599,6 +751,10 @@ def main():
     s.add_argument("--detalle", action="store_true", help="incluye la salida de cada ping")
     s.add_argument("--espera", type=int, default=120)
     s.set_defaults(func=cmd_probar)
+
+    s = sub.add_parser("consumo", help="RAM, CPU y disco de cada VM")
+    s.add_argument("--informe", help="guarda el resultado en este fichero")
+    s.set_defaults(func=cmd_consumo)
 
     s = sub.add_parser("xml", help="sólo genera XML y configuraciones (no requiere root)")
     s.add_argument("--salida", default="xml_generados")

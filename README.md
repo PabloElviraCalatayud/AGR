@@ -12,6 +12,7 @@ dos partes y las memorias (fuentes y PDF).
 │   ├── agr_kvm.py            script de despliegue (Python + lxml)
 │   ├── topologia.json        plan de numeración (redes, máquinas, rutas)
 │   ├── plantilla_vm.xml      XML base de Moodle
+│   ├── imagen/               imagen de disco de Moodle (no versionada)
 │   └── guest/                ficheros que se instalan en las VMs
 └── doc/
     ├── entregables/          PDF finales a entregar
@@ -66,8 +67,8 @@ Problemas habituales:
 
 - **Secure Boot activo:** `modprobe vboxdrv` falla. Desactívelo en la BIOS
   (o registre la clave MOK) y ejecute `sudo /sbin/vboxconfig`.
-- **`VERR_VMX_IN_VMX_ROOT_MODE` / `VERR_SVM_IN_USE`:** KVM ocupa la
-  virtualización. Ejecute `sudo modprobe -r kvm_intel kvm` (o `kvm_amd kvm`).
+- **`VERR_VMX_IN_VMX_ROOT_MODE` / `VERR_SVM_IN_USE`:** hay VMs de KVM
+  encendidas; apáguelas con `sudo ./agr_kvm.py parar` (en `parte2-kvm/`).
 
 ## Parte 2 – QEMU-KVM
 
@@ -76,17 +77,22 @@ Réplica del laboratorio 3103: 4 routers con FRR (RA–RD), servidor web
 como PC del profesor (10.200.0.2).
 
 ```bash
-sudo apt install qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients \
-                 libguestfs-tools isc-dhcp-client python3-lxml xterm
 cd parte2-kvm
+sudo ./agr_kvm.py instalar       # dependencias (una vez)
 sudo ./agr_kvm.py crear          # imagen base + bridges + 9 VMs
 sudo ./agr_kvm.py probar         # plan de pruebas de conectividad
+sudo ./agr_kvm.py consumo        # RAM, CPU y disco de cada VM
 sudo ./agr_kvm.py consola rc     # consola de una VM (root / agr)
 sudo ./agr_kvm.py destruir
 ```
 
-KVM y VirtualBox no pueden usarse a la vez: apague la VM de la parte 1
-(`vagrant halt`) y cargue KVM (`sudo modprobe kvm_amd` o `kvm_intel`).
+Las VMs parten de la **imagen de disco de Moodle** (Ubuntu 20.04): cópiela en
+`parte2-kvm/imagen/agr-vm-base.qcow2` (no se versiona por su tamaño; si no
+está, se descarga del Release `imagen-moodle` del repositorio).
+
+KVM y VirtualBox no pueden usarse a la vez; las herramientas cargan y
+descargan los módulos solas, basta con apagar las VMs de la otra parte
+(`vagrant halt` o `sudo ./agr_kvm.py parar`).
 
 Detalles en `doc/entregables/memoria_parte2.pdf`.
 

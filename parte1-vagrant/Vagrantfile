@@ -229,6 +229,16 @@ Vagrant.configure("2") do |config|
   config.vm.hostname = VM_NAME
   config.vm.box_check_update = false
 
+  # --- VirtualBox y KVM no pueden usarse a la vez ------------------------
+  # Antes de arrancar se descarga KVM (si está cargado) y se carga vboxdrv.
+  config.trigger.before [:up, :reload, :resume] do |t|
+    t.info = "Preparando el anfitrión para VirtualBox (puede pedir la contraseña de sudo)"
+    t.run = { inline: "bash -c 'for m in kvm_amd kvm_intel kvm; do " \
+                      "if lsmod | grep -q \"^$m \"; then sudo modprobe -r $m || " \
+                      "{ echo \"KVM en uso: apague las VMs de la parte 2 (agr_kvm.py parar)\"; exit 1; }; fi; done; " \
+                      "lsmod | grep -q \"^vboxdrv \" || sudo modprobe vboxdrv'" }
+  end
+
   # --- Redirección de puertos: anfitrión:8080 -> VM:3000 -----------------
   # Sin host_ip, VirtualBox escucha en todas las interfaces del anfitrión,
   # por lo que el servicio también es accesible desde otros equipos de la LAN.

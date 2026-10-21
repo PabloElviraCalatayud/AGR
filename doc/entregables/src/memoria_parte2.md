@@ -27,8 +27,9 @@ Entregables (carpeta `parte2-kvm/`):
 El script sigue estos pasos (orden `sudo ./agr_kvm.py crear`):
 
 1. **Imagen base común** (`agr-base.qcow2`, se crea una sola vez). Parte de la
-   imagen *cloud* oficial de Ubuntu 24.04 *minimal* (o de la imagen de Moodle,
-   con `--imagen-base`), se amplía a 6 GB y se personaliza con
+   **imagen de disco de Moodle** (Ubuntu 20.04, `root`/`agr`), como recomienda
+   el enunciado, sin modificar el original: se copia, se amplía a 6 GB y se
+   personaliza con
    `virt-customize` (libguestfs): contraseña de root `agr`, zona horaria, teclado
    español, **FRR** (sucesor de Quagga, la *Software Routing Suite*), agente
    QEMU, herramientas de red, **Node.js** y el servidor **SSR-master-server**
@@ -155,6 +156,19 @@ ip route 0.0.0.0/0 10.1.0.1
   defecto ya apunta hacia RB, que sí las conoce.
 
 # 5. Plan de pruebas
+
+**Requisitos que se verifican** (enunciado, pág. 4):
+
+> «configurar las rutas estáticas correspondientes para **lograr conectividad
+> global**» · «que cualquiera de las máquinas situadas en la parte inferior de
+> la red tenga acceso al servicio web del servidor. La máquina anfitriona
+> también deberá tener acceso al servidor» · «indicar el plan de pruebas que ha
+> llevado a cabo para **confirmar que existe conectividad global**».
+
+La conectividad entre PCs de redes inferiores distintas es, por tanto, un
+resultado esperado: además del enunciado, la deducen las propias tablas del
+plano (RB tiene rutas a 10.0.1–4.0/24 y RC/RD tienen su ruta por defecto hacia
+RB), de modo que PC1 → PC3 sigue RC → RB → RD sin configuración adicional.
 
 La orden `sudo ./agr_kvm.py probar --informe <fichero>` ejecuta
 automáticamente el plan de pruebas. Las órdenes dentro de las VMs se lanzan a
@@ -298,16 +312,17 @@ de VMs por GB de RAM y por ~18 el de VMs por GB de disco (0.34 VMs/GB en la part
 # 8. Uso del script
 
 ```
-sudo apt install qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients \
-                 libguestfs-tools isc-dhcp-client python3-lxml xterm
 cd parte2-kvm
+sudo ./agr_kvm.py instalar              # dependencias del anfitrión (una vez)
 sudo ./agr_kvm.py crear                 # despliega todo (la 1ª vez crea la imagen base)
 sudo ./agr_kvm.py estado
 sudo ./agr_kvm.py probar --informe pruebas.txt
 sudo ./agr_kvm.py consola ra rb         # consolas (root / agr)
+sudo ./agr_kvm.py consumo               # RAM, CPU y disco de cada VM
 sudo ./agr_kvm.py parar                 # apagar;  'arrancar' para volver a encender
 sudo ./agr_kvm.py destruir [--todo]     # borrar (con --todo también la imagen base)
 ```
 
-Para usar la imagen de Moodle: `sudo ./agr_kvm.py crear --imagen-base
-/ruta/imagen.qcow2` (necesita una distribución tipo Debian/Ubuntu con systemd).
+La imagen de Moodle se coloca en `parte2-kvm/imagen/agr-vm-base.qcow2` (o se
+descarga del Release `imagen-moodle`). El script carga KVM y descarga
+VirtualBox antes de arrancar, y libera KVM al `parar`/`destruir`.

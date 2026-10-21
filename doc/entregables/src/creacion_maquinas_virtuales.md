@@ -6,10 +6,11 @@ lang: es
 ---
 
 Este documento explica cómo se crean y configuran todas las máquinas virtuales
-de la práctica: qué hace cada script, en qué orden y con qué órdenes
-equivalentes se podría reproducir a mano. La parte 1 es una VM en VirtualBox
-creada con Vagrant; la parte 2, nueve VMs en QEMU-KVM creadas con
-`parte2-kvm/agr_kvm.py`.
+de la práctica: qué hace cada herramienta, en qué orden y qué ejecuta
+internamente. La parte 1 es una VM en VirtualBox creada con Vagrant
+(`vagrant up`); la parte 2, nueve VMs en QEMU-KVM creadas con
+`parte2-kvm/agr_kvm.py crear`. Los fragmentos de código de este documento
+muestran lo que hacen las herramientas; no hay que ejecutarlos a mano.
 
 # Parte 1: VM del servidor web con Vagrant
 
@@ -119,7 +120,7 @@ proceso termina.
 # Parte 2: red del laboratorio 3103 con QEMU-KVM
 
 El proceso completo lo ejecuta `sudo ./agr_kvm.py crear`. A continuación se
-detalla cada paso y la orden manual equivalente.
+detalla cada paso y lo que el script ejecuta en él.
 
 ## Paso 0. Definir la topología
 
@@ -146,13 +147,13 @@ se conecta.
 
 ## Paso 1. Obtener la imagen de partida
 
-Por defecto se descarga la imagen *cloud* oficial de **Ubuntu 24.04 minimal**
-(250 MB, qcow2, consola serie ya activada). También se puede partir de la
-imagen de Moodle con `--imagen-base`.
-
-```bash
-curl -fLO https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64.img
-```
+Como recomienda el enunciado, se parte de la **imagen de disco de Moodle**
+(`agr-vm-base.qcow2`): Ubuntu 20.04.5 LTS, kernel 5.4, 4 GB virtuales,
+usuario `root` con contraseña `agr`, interfaz `eth0` gestionada por ifupdown y
+cloud-init. El script la busca en `parte2-kvm/imagen/agr-vm-base.qcow2` y, si
+no está, la descarga del Release `imagen-moodle` del repositorio (no se guarda
+en git por su tamaño). **La imagen original nunca se modifica**: se trabaja
+sobre una copia.
 
 ## Paso 2. Construir la imagen base común (una sola vez)
 
@@ -161,10 +162,10 @@ servicios propios de cada rol quedan deshabilitados y se activan después en
 cada VM.
 
 ```bash
-qemu-img convert -O qcow2 ubuntu-24.04-minimal-cloudimg-amd64.img agr-base.qcow2
+qemu-img convert -O qcow2 imagen/agr-vm-base.qcow2 agr-base.qcow2   # copia
 qemu-img resize agr-base.qcow2 6G
 virt-customize -a agr-base.qcow2 --network \
-  --run-command 'growpart /dev/sda 1 && resize2fs /dev/sda1' \
+  --run-command '<amplía la partición raíz con growpart y resize2fs>' \
   --root-password password:agr --timezone Europe/Madrid \
   --upload guest/agr-net.sh:/usr/local/sbin/agr-net.sh \
   --upload guest/agr-net.service:/etc/systemd/system/agr-net.service \
@@ -178,7 +179,8 @@ virt-customize -a agr-base.qcow2 --network \
 y ejecuta órdenes dentro de la imagen como si fuera su sistema, **sin
 arrancarla**.
 
-`guest/build-base.sh` hace, dentro de la imagen:
+`guest/build-base.sh` hace, dentro de la imagen (con los repositorios de
+Ubuntu 20.04: FRR 7.2, Node.js 22 porque la glibc es 2.31):
 
 1. **Paquetes:**
    - `frr` (FRRouting, la *Software Routing Suite*, sucesora de Quagga).
@@ -209,7 +211,8 @@ arrancarla**.
 ## Paso 3. Crear las redes en el anfitrión
 
 Cada red del plano es un **bridge Linux** (equivalente a un switch). El
-anfitrión sólo tiene IP en `agr-prof`, porque hace de PC Profesor:
+anfitrión sólo tiene IP en `agr-prof`, porque hace de PC Profesor. El script
+ejecuta:
 
 ```bash
 for br in agr-srv agr-prof agr-ab agr-bc agr-bd agr-red1 agr-red2 agr-red3 agr-red4; do
@@ -228,8 +231,8 @@ echo 0 > /proc/sys/net/bridge/bridge-nf-call-iptables
 ## Paso 4. Disco de cada máquina
 
 Cada VM tiene un **disco qcow2 diferencial** cuya base (*backing file*) es la
-imagen común. Sólo guarda lo que esa VM cambia: 14–23 MB por VM frente a los
-1.26 GB de la base.
+imagen común. Sólo guarda lo que esa VM cambia (unas decenas de MB por VM
+frente a los ~2 GB de la base). El script ejecuta:
 
 ```bash
 qemu-img create -f qcow2 -F qcow2 -b agr-base.qcow2 /var/lib/libvirt/images/agr/rc.qcow2
@@ -237,8 +240,8 @@ qemu-img create -f qcow2 -F qcow2 -b agr-base.qcow2 /var/lib/libvirt/images/agr/
 
 ## Paso 5. Configurar cada disco antes del primer arranque
 
-Con `virt-customize`, sin red y en pocos segundos, se escribe en cada disco su
-configuración. Ejemplo para RC:
+Con `virt-customize`, sin red y en pocos segundos, el script escribe en cada
+disco su configuración. Ejemplo para RC:
 
 ```bash
 virt-customize -a rc.qcow2 \
@@ -366,6 +369,8 @@ con `virt-xml-validate`. Fragmento de `agr-rc.xml`:
 
 ## Paso 7. Definir y arrancar
 
+El script registra y arranca cada dominio:
+
 ```bash
 virsh define /var/lib/libvirt/images/agr/agr-rc.xml
 virsh start agr-rc
@@ -380,7 +385,7 @@ indicado. Es el equivalente a enchufar un cable al switch.
    (`Before=network-pre.target frr.service`). El script `agr-net.sh`:
    - Lee `/etc/agr/node.conf` y espera a que existan todas las interfaces.
    - Busca cada interfaz por su MAC en `/sys/class/net/*/address`.
-   - La **renombra** (`ip link set dev ens3 name ge0-0-5`), le asigna su IP y la
+   - La **renombra** (`ip link set dev eth0 name ge0-0-5`), le asigna su IP y la
      levanta.
    - Activa el reenvío IP (`/proc/sys/net/ipv4/ip_forward = 1`) sólo si el rol
      es `router`.
@@ -403,7 +408,8 @@ indicado. Es el equivalente a enchufar un cable al switch.
 - `agr-net.service` ha terminado;
 - tiene **todas** sus rutas instaladas.
 
-La orden `probar` lanza las pruebas dentro de las VMs mediante el agente:
+La orden `probar` lanza las pruebas dentro de las VMs mediante el agente; por
+ejemplo, para el ping de PC1 al servidor ejecuta:
 
 ```bash
 virsh qemu-agent-command agr-pc1 \
@@ -413,23 +419,3 @@ virsh qemu-agent-command agr-pc1 '{"execute":"guest-exec-status","arguments":{"p
 
 Resultado obtenido: **50/50 pruebas correctas**
 (`doc/development/parte2/pruebas.txt`).
-
-## Resumen: reproducir RC a mano sin el script
-
-```bash
-# 1. Redes que usa RC
-ip link add agr-bc type bridge;   ip link set agr-bc up
-ip link add agr-red1 type bridge; ip link set agr-red1 up
-ip link add agr-red2 type bridge; ip link set agr-red2 up
-# 2. Disco diferencial sobre la imagen base
-qemu-img create -f qcow2 -F qcow2 -b agr-base.qcow2 rc.qcow2
-# 3. Configuración del disco
-virt-customize -a rc.qcow2 --hostname rc --mkdir /etc/agr \
-  --upload rc-node.conf:/etc/agr/node.conf --upload rc-frr.conf:/etc/frr/frr.conf \
-  --run-command 'chown frr:frr /etc/frr/frr.conf && systemctl enable frr'
-# 4. Dominio libvirt
-virsh define agr-rc.xml && virsh start agr-rc
-# 5. Comprobación
-virsh console agr-rc          # root / agr
-vtysh -c 'show ip route'
-```

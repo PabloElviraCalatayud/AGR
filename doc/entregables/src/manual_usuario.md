@@ -21,24 +21,21 @@ AGR/
     └── build_pdf.sh               regenera los PDF
 ```
 
-Requisitos del anfitrión: Linux x86-64 (probado en Ubuntu 24.04), CPU con
+Requisitos del anfitrión: Linux x86-64 Debian/Ubuntu (probado en Ubuntu 24.04), CPU con
 virtualización (VT-x/AMD-V) activada en la BIOS, ≥ 8 GB de RAM y ≥ 10 GB libres
 de disco, y conexión a Internet la primera vez.
 
 ```bash
-egrep -c '(vmx|svm)' /proc/cpuinfo     # debe ser > 0
 git clone https://github.com/PabloElviraCalatayud/AGR.git
 cd AGR
 ```
 
-> **VirtualBox (parte 1) y KVM (parte 2) no pueden ejecutarse a la vez.** Para
-> pasar de una a otra:
->
-> - A KVM: `vagrant halt` (en `parte1-vagrant/`) y después
->   `sudo modprobe -r vboxnetadp vboxnetflt vboxdrv; sudo modprobe kvm_amd`
->   (o `kvm_intel`).
-> - A VirtualBox: `sudo ./agr_kvm.py parar` (en `parte2-kvm/`) y después
->   `sudo modprobe -r kvm_amd kvm` (o `kvm_intel kvm`).
+> **VirtualBox (parte 1) y KVM (parte 2) no pueden ejecutarse a la vez.** Las
+> herramientas lo gestionan solas: `agr_kvm.py` descarga VirtualBox y carga
+> KVM antes de arrancar las VMs y descarga KVM al `parar`/`destruir`; el
+> `Vagrantfile` hace lo contrario antes de `vagrant up` (pide la contraseña de
+> `sudo`). Sólo hay que apagar las VMs de una parte antes de usar la otra:
+> `vagrant halt` o `sudo ./agr_kvm.py parar`.
 
 # 2. Parte 1: servidor web con Vagrant
 
@@ -106,7 +103,7 @@ Dentro de la VM: `systemctl status ssr-server`, `journalctl -u ssr-server -f`,
 | `No usable default provider` / `vboxdrv kernel module is not loaded` | `sudo /sbin/vboxconfig`; si falla, ver filas siguientes |
 | `modprobe vboxdrv failed` con Secure Boot | Desactivar Secure Boot en la BIOS (o registrar la clave MOK) y repetir `sudo /sbin/vboxconfig` |
 | VirtualBox no compila para un kernel nuevo | Instalar la última versión (`virtualbox-7.2`) |
-| `VERR_VMX_IN_VMX_ROOT_MODE` / `VERR_SVM_IN_USE` | KVM está cargado: `sudo modprobe -r kvm_amd kvm` |
+| `VERR_VMX_IN_VMX_ROOT_MODE` / `VERR_SVM_IN_USE` | Hay VMs de KVM encendidas: `sudo ./agr_kvm.py parar` (en `parte2-kvm/`) |
 | `A Vagrant environment ... is required` | Ejecutar desde `parte1-vagrant/` |
 | `Vagrant cannot forward the specified ports` (8080 ocupado) | Liberar el puerto 8080 en el anfitrión o cambiar `PUERTO_HOST` en el `Vagrantfile` |
 
@@ -115,12 +112,18 @@ Dentro de la VM: `systemctl status ssr-server`, `journalctl -u ssr-server -f`,
 ## 3.1. Instalación (una sola vez)
 
 ```bash
-sudo apt install -y qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients \
-                    libguestfs-tools isc-dhcp-client python3-lxml xterm
-sudo systemctl enable --now libvirtd
-sudo modprobe kvm_amd        # o kvm_intel
-ls -l /dev/kvm               # debe existir
+cd parte2-kvm
+sudo ./agr_kvm.py instalar
 ```
+
+Instala QEMU/KVM, libvirt, libguestfs, `lxml` y las herramientas de red, y
+activa `libvirtd`.
+
+**Imagen de las VMs.** Se usa la imagen de disco de Moodle (Ubuntu 20.04,
+`root`/`agr`), como recomienda el enunciado. Cópiela en
+`parte2-kvm/imagen/agr-vm-base.qcow2`; si no está, `crear` la descarga del
+Release `imagen-moodle` del repositorio. No se versiona en git por su tamaño
+(~2 GB).
 
 ## 3.2. Órdenes del script
 
@@ -128,22 +131,24 @@ Todas desde `parte2-kvm/` y con `sudo` (salvo `xml`). `-v` muestra trazas.
 
 | Orden | Qué hace |
 |---|---|
+| `sudo ./agr_kvm.py instalar` | Instala las dependencias del anfitrión (una vez) |
 | `sudo ./agr_kvm.py crear` | Crea la imagen base (sólo la 1ª vez), los bridges, las 9 VMs y las arranca. Si ya existían, las recrea |
 | `sudo ./agr_kvm.py crear rc pc1` | Recrea sólo esas máquinas |
 | `sudo ./agr_kvm.py estado` | Estado, rol, RAM e IPs de cada VM |
 | `sudo ./agr_kvm.py probar [--informe f.txt] [--detalle]` | Plan de pruebas de conectividad (ver §3.4) |
 | `sudo ./agr_kvm.py consola ra pc1` | Abre un `xterm` con la consola serie de cada VM |
-| `sudo ./agr_kvm.py parar [vms]` | Apaga ordenadamente |
+| `sudo ./agr_kvm.py consumo [--informe f.txt]` | RAM real (RSS), CPU y disco de cada VM y total |
+| `sudo ./agr_kvm.py parar [vms]` | Apaga ordenadamente (y libera KVM para VirtualBox) |
 | `sudo ./agr_kvm.py arrancar [vms]` | Arranca (y recrea bridges y rutas del anfitrión, que se pierden al reiniciar el PC) |
 | `sudo ./agr_kvm.py destruir [vms]` | Borra VMs y discos; sin argumentos, también bridges y rutas |
-| `sudo ./agr_kvm.py destruir --todo` | Además borra la imagen base y la descarga |
+| `sudo ./agr_kvm.py destruir --todo` | Además borra la imagen base construida (no la de `imagen/`) |
 | `./agr_kvm.py xml --salida dir` | Sólo genera XML, `frr.conf` y `node.conf` para revisarlos |
 
 Opciones de `crear`:
 
 | Opción | Uso |
 |---|---|
-| `--imagen-base RUTA.qcow2` | Partir de la imagen de Moodle en lugar de Ubuntu 24.04 cloud |
+| `--imagen-base RUTA.qcow2` | Partir de otra imagen (por defecto, la de Moodle en `imagen/`); `ubuntu` usa Ubuntu 24.04 cloud |
 | `--reconstruir-base` | Rehacer la imagen base (p. ej. tras cambiar `guest/`) |
 | `--proxy http://host:puerto` | Proxy para descargar paquetes (redes universitarias) |
 | `--espera N` | Segundos máximos de espera al arranque (300) |
@@ -153,7 +158,7 @@ Opciones de `crear`:
 
 ```bash
 cd parte2-kvm
-sudo ./agr_kvm.py -v crear     # 1ª vez ~5-10 min (descarga ~250 MB y construye la imagen)
+sudo ./agr_kvm.py -v crear     # 1ª vez ~5-10 min (construye la imagen base)
 sudo ./agr_kvm.py estado       # las 9 deben estar "running"
 ```
 
@@ -212,26 +217,27 @@ se conecta.
 ## 3.6. Medir el consumo
 
 ```bash
-sudo virsh list
-ps -eo rss,args | grep "[g]uest=agr" | awk '{print $1/1024 " MiB"}'   # RAM real por VM
-free -h
-du -sh /var/lib/libvirt/images/agr/*.qcow2                            # disco por VM
-watch "ls -al /var/lib/libvirt/images/agr/"                           # crecimiento de imágenes
-sudo virsh domstats agr-srv --cpu-total --balloon
+sudo ./agr_kvm.py consumo --informe ../doc/development/parte2/consumo.txt
 ```
+
+Muestra, por VM, la RAM asignada, la RAM real que ocupa en el anfitrión (RSS
+del proceso QEMU), el disco diferencial y el tiempo de CPU, y los totales
+frente a la RAM del anfitrión. Repitiéndolo durante `probar` se observa el
+crecimiento de los discos.
 
 ## 3.7. Problemas frecuentes
 
 | Síntoma | Causa / solución |
 |---|---|
-| `/dev/kvm no existe` | Virtualización desactivada en la BIOS o módulo no cargado: `sudo modprobe kvm_amd` |
+| Aviso `/dev/kvm no existe` | Virtualización (VT-x/AMD-V) desactivada en la BIOS; el script ya intenta cargar el módulo |
+| `No se encuentra la imagen de Moodle` | Copiarla en `parte2-kvm/imagen/agr-vm-base.qcow2` |
 | VMs no arrancan: `Permission denied` en el disco | El directorio no es accesible para `libvirt-qemu`: usar el `--dir` por defecto |
 | `virt-customize` no descarga paquetes | Falta `isc-dhcp-client` en el anfitrión o hace falta `--proxy` |
-| `supermin exited with error` | `libguestfs-test-tool` para diagnosticar; necesita un kernel en `/boot` legible |
-| Un router no tiene rutas (`ip route` sin `via`) | `vtysh -b` en el router; la imagen ya lo aplica al arrancar FRR |
+| `supermin exited with error` | libguestfs necesita un kernel en `/boot`; ejecutar con `-v` para ver el detalle |
+| Un router no tiene rutas | `sudo ./agr_kvm.py crear <router>` lo recrea; la imagen ya reaplica la configuración de FRR al arrancar |
 | Tras reiniciar el PC no hay conectividad con las VMs | Los bridges no son persistentes: `sudo ./agr_kvm.py arrancar` |
 | Sin conectividad anfitrión ↔ lab con Docker instalado | El script desactiva `bridge-nf-call-iptables`; revisar `sudo iptables -L FORWARD` |
-| Conflicto con VirtualBox | Ver el aviso de la sección 1 |
+| Aviso `VirtualBox está en uso` | Apagar la VM de la parte 1: `vagrant halt` |
 
 # 4. Regenerar la documentación
 
