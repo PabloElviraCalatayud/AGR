@@ -185,8 +185,9 @@ necesidad de red de gestión ni SSH:
 
 ## 5.1. Resultados
 
-El plan se ejecutó sobre el despliegue completo (9 VMs). Resultado:
-**50/50 pruebas correctas**. El informe completo, con las tablas de rutas y
+El plan se ejecutó sobre el despliegue completo (9 VMs) construido a partir
+de una imagen Ubuntu 20.04 como la de Moodle. Resultado: **50/50 pruebas
+correctas**. El informe completo, con las tablas de rutas y
 los `traceroute`, está en `doc/development/parte2/pruebas.txt`.
 
 | Bloque | Pruebas | Correctas |
@@ -233,9 +234,14 @@ C>* 10.3.0.0/30 is directly connected, ge0-0-4
 
 # 6. Consumo de recursos
 
-Medidas sobre el despliegue completo (9 VMs) en el anfitrión de prácticas
-(AMD Ryzen 7 7700X, 30 GiB de RAM, Ubuntu 24.04, KVM). Datos en bruto en
-`doc/development/parte2/consumo_kvm_raw.txt`.
+Medidas sobre el despliegue completo (9 VMs). Se obtienen con
+`sudo ./agr_kvm.py consumo --informe <fichero>`.
+
+> La tabla de memoria se midió en el anfitrión de prácticas (AMD Ryzen 7
+> 7700X, 30 GiB de RAM, Ubuntu 24.04, KVM) con la versión anterior del
+> despliegue, basada en Ubuntu 24.04 (`doc/development/parte2/consumo_kvm_raw.txt`);
+> la asignación de RAM por VM es la misma. Las medidas de disco corresponden a
+> la imagen Ubuntu 20.04 actual.
 
 ## 6.1. Memoria
 
@@ -269,25 +275,27 @@ RAM real de cada proceso QEMU en el anfitrión (RSS):
 
 | Recurso | Medida |
 |---|---|
-| Imagen base (`agr-base.qcow2`, 6 GB virtuales) | **1.26 GB** |
-| Disco diferencial de cada router | 22–23 MB |
-| Disco diferencial de cada PC y del servidor | 14–15 MB |
-| **Disco total de las 9 VMs** | **≈ 1.43 GB** |
+| Imagen base (`agr-base.qcow2`, 6 GB virtuales) | **2.2 GB** |
+| Disco diferencial de cada router | 22–48 MB |
+| Disco diferencial de cada PC y del servidor | 18–22 MB |
+| **Disco total de las 9 VMs** | **≈ 2.4 GB** |
 
 Gracias a los discos diferenciales, las 9 VMs ocupan **menos que la única VM
-de la parte 1** (2.1 GB de disco diferencial + 811 MB de *box*).
+de la parte 1** (2.1 GB de disco diferencial + 811 MB de *box*): cada VM
+añade sólo unas decenas de MB a la imagen base compartida.
 
 ## 6.3. Extrapolación
 
 | Escenario | VMs | RAM (≈ 400 MiB por VM) | Disco |
 |---|---|---|---|
-| Réplica reducida (desplegada) | 9 | 3.6 GiB | 1.4 GB |
-| Réplica completa (32 PC + 2 servidores) | 38 | ~15 GiB | ~2 GB |
+| Réplica reducida (desplegada) | 9 | 3.6 GiB | 2.4 GB |
+| Réplica completa (32 PC + 2 servidores) | 38 | ~15 GiB | ~3.2 GB |
 | Servidor comercial de 1 TB de RAM | ~2300 VMs | ≈ 60 réplicas completas | — |
 
 Frente a la parte 1 (≈ 1.07 GiB por VM de 1 GB con VirtualBox), la combinación
 KVM + discos diferenciales + asignación ajustada multiplica por ~2.7 el número
-de VMs por GB de RAM y por ~18 el de VMs por GB de disco (0.34 VMs/GB en la parte 1 frente a 6.3 VMs/GB aquí).
+de VMs por GB de RAM y por ~11 el de VMs por GB de disco (0.34 VMs/GB en la
+parte 1 frente a 3.7 VMs/GB aquí).
 
 # 7. Configuraciones adicionales
 

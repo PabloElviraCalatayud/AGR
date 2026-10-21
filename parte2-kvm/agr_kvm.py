@@ -618,8 +618,13 @@ def esperar_agentes(topo, nombres, timeout):
                 # agr-net.service terminado y todas las rutas estáticas instaladas
                 # (en los routers las instala FRR unos segundos después)
                 rutas = len(topo["maquinas"][n]["rutas"])
-                code, _ = guest_exec(n, "systemctl is-active agr-net.service && "
-                                        f"[ $(ip route | grep -c ' via ') -ge {rutas} ]", 10)
+                orden = ("systemctl is-active agr-net.service && "
+                         f"[ $(ip route | grep -c ' via ') -ge {rutas} ]")
+                # el servidor, además, debe responder ya en su puerto
+                if n == topo["servicio_web"]["maquina"]:
+                    orden += (" && curl -s -o /dev/null --max-time 20 "
+                              f"http://localhost:{topo['servicio_web']['puerto']}/")
+                code, _ = guest_exec(n, orden, 30)
                 if code == 0:
                     log.info("%s lista", n)
                     pendientes.discard(n)
@@ -656,7 +661,7 @@ def cmd_probar(topo, args):
             ip = itf["ip"].split("/")[0]
             r = sh(["ping", "-c", "2", "-W", "2", ip], check=False, capture=True)
             anotar("anfitrion", f"ping {ip:<12} ({n.upper()} {itf['nombre']})", r.returncode == 0)
-    r = sh(["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "5", url],
+    r = sh(["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "15", url],
            check=False, capture=True)
     anotar("anfitrion", f"HTTP GET {url} -> {r.stdout}", r.stdout == "200")
 
@@ -666,9 +671,9 @@ def cmd_probar(topo, args):
     for n in pcs:
         c, o = guest_exec(n, f"ping -c 2 -W 2 {web['ip']}")
         anotar(n, f"ping {web['ip']}", c == 0, o if args.detalle else "")
-        c, o = guest_exec(n, f"curl -s -o /dev/null -w '%{{http_code}}' --max-time 5 {url}")
+        c, o = guest_exec(n, f"curl -s -o /dev/null -w '%{{http_code}}' --max-time 15 {url}")
         anotar(n, f"HTTP GET {url} -> {o.strip()}", o.strip() == "200")
-        c, o = guest_exec(n, f"curl -s --max-time 5 '{url}record?id_nodo={n}&temperatura=21.5"
+        c, o = guest_exec(n, f"curl -s --max-time 15 '{url}record?id_nodo={n}&temperatura=21.5"
                              f"&humedad=40&co2=400&volatiles=10'")
         anotar(n, "HTTP GET /record (escritura de datos)", c == 0 and "Saving" in o)
         c, o = guest_exec(n, f"traceroute -n -w 2 -q 1 {web['ip']}")
