@@ -106,5 +106,6 @@ Todo en `doc/entregables/` (PDF) con sus fuentes Markdown en `doc/entregables/sr
 | `creacion_maquinas_virtuales` | Paso a paso de cómo se crean y configuran todas las VMs (Vagrant y KVM), con las órdenes manuales equivalentes |
 | `memoria_parte1` | Parte 1: configuración, pruebas y estudio de consumo |
 | `memoria_parte2` | Parte 2: arquitectura, plan de numeración, tablas de enrutamiento, plan de pruebas y resultados |
+| `explicacion_tecnica` | Conexión de todas las redes, cumplimiento del enunciado punto a punto, proceso completo y explicación detallada de cada script |
 
 Para regenerar los PDF: `doc/build_pdf.sh` (requiere `pandoc` y Chromium/Chrome).
