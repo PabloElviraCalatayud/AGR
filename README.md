@@ -106,6 +106,8 @@ Todo en `doc/entregables/` (PDF) con sus fuentes Markdown en `doc/entregables/sr
 | `creacion_maquinas_virtuales` | Paso a paso de cómo se crean y configuran todas las VMs (Vagrant y KVM), con las órdenes manuales equivalentes |
 | `memoria_parte1` | Parte 1: configuración, pruebas y estudio de consumo |
 | `memoria_parte2` | Parte 2: arquitectura, plan de numeración, tablas de enrutamiento, plan de pruebas y resultados |
+| `diagrama_red_lab3103` (PDF/PNG) | Diagrama de red: equipos, bridges, tarjetas, puertos del plano e IPs |
+| `diagrama_construccion_lab3103` (PDF/PNG) | El mismo diagrama con la orden con que se creó cada enlace y cada equipo |
 | `red_laboratorio_3103` | Red montada a mano: diagrama, esquema de conexiones, tablas de rutas, tabla de accesos y plan de pruebas |
 | `explicacion_tecnica` | Conexión de todas las redes, cumplimiento del enunciado punto a punto, proceso completo y explicación detallada de cada script |
 
