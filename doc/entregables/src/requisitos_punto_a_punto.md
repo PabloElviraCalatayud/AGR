@@ -443,8 +443,8 @@ para lograr conectividad global.»
 - traceroutes con los caminos del plano;
 - 180/180 pings.
 
-**Estado:** ✅ (⚠️ en la documentación: falta pegar la captura real de
-`show ip route` de RA, ya con `eth2`, y de RD).
+**Estado:** ✅ Capturas reales de los cuatro routers en la verificación final
+del 10/11/2026 (`doc/development/parte2/verificacion_final.txt`).
 
 ## R2.9. Servicio web en el servidor
 
@@ -522,7 +522,7 @@ configurado en los distintos router.»
 
 **Dónde está:** `red_laboratorio_3103.pdf` §2.3 y `memoria_parte2.pdf` §4.
 
-**Estado:** ⚠️ Faltan las capturas reales de RA (con `eth2`) y de RD.
+**Estado:** ✅ Las cuatro tablas son capturas reales (10/11/2026).
 
 ## R2.15. Plan de pruebas que confirme la conectividad global
 
@@ -683,12 +683,13 @@ la máquina virtual.»
 | Parte | ✅ | ⚠️ | ❌ |
 |---|---|---|---|
 | Parte 1 (13 requisitos) | 12 | 1 (captura de `watch`, opcional) | 0 |
-| Parte 2 (23 requisitos) | 17 | 6 | 0 |
+| Parte 2 (23 requisitos) | 18 | 5 | 0 |
 
 **Pendientes:**
 
 1. **Subir `parte2/`** (versión manual) al repositorio desde tu PC.
-2. **Capturas de rutas:** pegar `vtysh -c 'show ip route'` de RA y de RD.
+2. **Verificación final de PC1–PC4:** pegar el bloque de comprobación en las
+   cuatro (routers y SRV ya verificados el 10/11/2026).
 3. **Ejecutar el script con la imagen de Moodle en tu PC** y decidir si se
    alinea con el diseño manual.
 4. **(Opcional)** Más configuración de FRR (R2.16).

@@ -126,9 +126,11 @@ C>* 10.3.0.0/30 is directly connected, eth0
 Coinciden con las tablas del plano. RA también tiene directamente conectada
 la red 10.1.0.0/30, que la tabla del plano no lista.
 
-> Pendiente de confirmar: las salidas de RB y RC son capturas reales. Las de RA
-> (ya con `eth2`) y RD son las esperadas según la configuración aplicada y hay
-> que sustituirlas por la captura de `vtysh -c 'show ip route'` en cada uno.
+Las cuatro tablas son capturas reales de la verificación final del
+10/11/2026 (`doc/development/parte2/verificacion_final.txt` y las capturas de
+pantalla en `doc/development/parte2/capturas/`). En todos los routers la tabla
+del kernel (`ip route`) contiene las mismas rutas, marcadas `proto static`:
+FRR las ha instalado.
 
 # 3. Tabla de accesos
 
@@ -201,9 +203,14 @@ echo "$H: $ok/18 OK, web=$web, fallan:${fail:- ninguna}"
 
 Resultado en los 10 equipos: `18/18 OK, web=200, fallan: ninguna`.
 
+La verificación se repitió el 10/11/2026 tras reiniciar el anfitrión
+(`red.sh` + arranque de las 9 VMs) con el mismo resultado en RA, RB, RC, RD y
+SRV: `18/18, web=200` (`doc/development/parte2/verificacion_final.txt`).
+
 ## 4.3. Caminos comprobados con `traceroute`
 
 ```
+Anfitrión → PC4: 10.200.0.1 (RA) → 10.1.0.2 (RB) → 10.3.0.2 (RD) → 10.0.4.10
 PC2 → SRV:  10.0.2.1 (RC) → 10.2.0.1 (RB) → 10.1.0.1 (RA) → 10.100.0.11
 PC3 → SRV:  10.0.3.1 (RD) → 10.3.0.1 (RB) → 10.1.0.1 (RA) → 10.100.0.11
 PC4 → SRV:  10.0.4.1 (RD) → 10.3.0.1 (RB) → 10.1.0.1 (RA) → 10.100.0.11
@@ -223,7 +230,43 @@ El servidor escucha en `*:3000` (todas las IPs de SRV). El mes del nombre del
 CSV aparece como 9 en octubre porque el servidor usa `getMonth()` de
 JavaScript, que numera los meses desde 0.
 
-# 5. Incidencias encontradas
+# 5. Consumo de recursos (versión manual)
+
+Medido el 10/11/2026 con las 9 VMs en marcha, en el anfitrión (Ryzen 7 7700X,
+30 GiB).
+
+## 5.1. Memoria
+
+| VM | RAM asignada (plantilla de Moodle) | RAM real en el anfitrión (RSS de QEMU) |
+|---|---|---|
+| SRV | 1 GB | 760 MiB |
+| RA / RB / RC / RD | 1 GB cada una | 699 / 693 / 694 / 691 MiB |
+| PC1 / PC2 / PC3 / PC4 | 1 GB cada una | 688 / 692 / 688 / 687 MiB |
+| **Total** | **9 GB** | **6291 MiB (6.1 GiB), un 20 % de la RAM del anfitrión** |
+
+- Las VMs usan la RAM de la plantilla de Moodle (1 GB y 2 vCPU) sin ajustar.
+  KVM sólo reserva las páginas que el invitado toca, por eso cada una ocupa
+  unos 690 MiB y no 1 GB.
+- El servidor ocupa algo más (760 MiB) por el proceso de Node.js.
+- El anfitrión sigue con 20 GiB disponibles.
+- Comparación: la versión del script asigna 384 MB a cada router y PC y 768 MB
+  al servidor, y ocupa 3.6 GiB en total. Reducir la RAM de los XML a esos
+  valores bajaría el consumo casi a la mitad.
+
+## 5.2. Disco
+
+| Disco | Tamaño real |
+|---|---|
+| `base.qcow2` (imagen de Moodle, intacta) | 2.0 GB |
+| `molde.qcow2` (FRR, Node.js, servidor web) | 1.2 GB |
+| Disco diferencial de cada VM | 136–146 MB |
+| **Total (11 ficheros)** | **≈ 4.5 GB** |
+
+Gracias a la cadena `base ← molde ← VM`, las 9 VMs sólo añaden unos 1.25 GB
+entre todas: copiar la imagen completa para cada una costaría unos 29 GB
+(9 × 3.2 GB).
+
+# 6. Incidencias encontradas
 
 | Incidencia | Causa | Solución |
 |---|---|---|

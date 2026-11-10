@@ -1,0 +1,121 @@
+Verificación final de la red del laboratorio 3103 (versión manual)
+Fecha: 2026-11-10 · Anfitrión: AMD Ryzen 7 7700X, 30 GiB RAM, Ubuntu 24.04, KVM
+Capturas de pantalla originales en capturas/verificacion_<vm>.webp
+
+Orden ejecutada en cada VM:
+  echo "===== $(hostname) ====="; ip -br -4 a | grep -v '^lo'; ip route;
+  [routers] vtysh -c 'show ip route' | grep -E '^[CS]'; [srv] ss -tln | grep ':3000';
+  ping a las 18 IPs del laboratorio + curl http://10.100.0.11:3000/
+
+===== ra =====
+eth0  UP  10.100.0.1/24
+eth1  UP  10.1.0.1/30
+eth2  UP  10.200.0.1/30
+default via 10.1.0.2 dev eth1 proto static metric 20
+10.1.0.0/30 dev eth1 proto kernel scope link src 10.1.0.1
+10.100.0.0/24 dev eth0 proto kernel scope link src 10.100.0.1
+10.200.0.0/30 dev eth2 proto kernel scope link src 10.200.0.1
+S>* 0.0.0.0/0 [1/0] via 10.1.0.2, eth1
+C>* 10.1.0.0/30 is directly connected, eth1
+C>* 10.100.0.0/24 is directly connected, eth0
+C>* 10.200.0.0/30 is directly connected, eth2
+CONECTIVIDAD: 18/18, web=200, fallan: ninguna
+
+===== rb =====
+eth0  UP  10.1.0.2/30
+eth1  UP  10.2.0.1/30
+eth2  UP  10.3.0.1/30
+default via 10.1.0.1 dev eth0 proto static metric 20
+10.0.1.0/24 via 10.2.0.2 dev eth1 proto static metric 20
+10.0.2.0/24 via 10.2.0.2 dev eth1 proto static metric 20
+10.0.3.0/24 via 10.3.0.2 dev eth2 proto static metric 20
+10.0.4.0/24 via 10.3.0.2 dev eth2 proto static metric 20
+10.1.0.0/30 dev eth0 proto kernel scope link src 10.1.0.2
+10.2.0.0/30 dev eth1 proto kernel scope link src 10.2.0.1
+10.3.0.0/30 dev eth2 proto kernel scope link src 10.3.0.1
+S>* 0.0.0.0/0 [1/0] via 10.1.0.1, eth0
+S>* 10.0.1.0/24 [1/0] via 10.2.0.2, eth1
+S>* 10.0.2.0/24 [1/0] via 10.2.0.2, eth1
+S>* 10.0.3.0/24 [1/0] via 10.3.0.2, eth2
+S>* 10.0.4.0/24 [1/0] via 10.3.0.2, eth2
+C>* 10.1.0.0/30 is directly connected, eth0
+C>* 10.2.0.0/30 is directly connected, eth1
+C>* 10.3.0.0/30 is directly connected, eth2
+CONECTIVIDAD: 18/18, web=200, fallan: ninguna
+
+===== rc =====
+eth0  UP  10.2.0.2/30
+eth1  UP  10.0.1.1/24
+eth2  UP  10.0.2.1/24
+default via 10.2.0.1 dev eth0 proto static metric 20
+10.0.1.0/24 dev eth1 proto kernel scope link src 10.0.1.1
+10.0.2.0/24 dev eth2 proto kernel scope link src 10.0.2.1
+10.2.0.0/30 dev eth0 proto kernel scope link src 10.2.0.2
+S>* 0.0.0.0/0 [1/0] via 10.2.0.1, eth0
+C>* 10.0.1.0/24 is directly connected, eth1
+C>* 10.0.2.0/24 is directly connected, eth2
+C>* 10.2.0.0/30 is directly connected, eth0
+CONECTIVIDAD: 18/18, web=200, fallan: ninguna
+
+===== rd =====
+eth0  UP  10.3.0.2/30
+eth1  UP  10.0.3.1/24
+eth2  UP  10.0.4.1/24
+default via 10.3.0.1 dev eth0 proto static metric 20
+10.0.3.0/24 dev eth1 proto kernel scope link src 10.0.3.1
+10.0.4.0/24 dev eth2 proto kernel scope link src 10.0.4.1
+10.3.0.0/30 dev eth0 proto kernel scope link src 10.3.0.2
+S>* 0.0.0.0/0 [1/0] via 10.3.0.1, eth0
+C>* 10.0.3.0/24 is directly connected, eth1
+C>* 10.0.4.0/24 is directly connected, eth2
+C>* 10.3.0.0/30 is directly connected, eth0
+CONECTIVIDAD: 18/18, web=200, fallan: ninguna
+
+===== srv =====
+eth0  UP  10.100.0.11/24
+default via 10.100.0.1 dev eth0 onlink
+10.100.0.0/24 dev eth0 proto kernel scope link src 10.100.0.11
+LISTEN 0 511 *:3000 *:*
+CONECTIVIDAD: 18/18, web=200, fallan: ninguna
+
+===== pc1, pc2, pc3, pc4 =====
+(pendiente de captura en esta verificación; en la prueba anterior del 25/10: 18/18, web=200)
+
+===== anfitrion =====
+$ traceroute -n 10.0.4.10
+ 1  10.200.0.1  0.261 ms
+ 2  10.1.0.2    0.222 ms
+ 3  10.3.0.2    0.307 ms
+ 4  10.0.4.10   0.451 ms
+$ curl ".../record?id_nodo=final&..."
+Saving: final;1794330714210;22;48;415;9; in: /opt/ssr-master-server/routes/../public/logs/final-2026-10-10.csv
+
+===== consumo (RSS de cada proceso QEMU en el anfitrión) =====
+srv  760 MiB
+ra   699 MiB
+rb   693 MiB
+rc   694 MiB
+rd   691 MiB
+pc1  688 MiB
+pc2  692 MiB
+pc3  688 MiB
+pc4  687 MiB
+TOTAL 6291 MiB
+
+$ free -h
+               total        used        free      shared  buff/cache   available
+Mem:            30Gi        10Gi       7.1Gi       160Mi        13Gi        20Gi
+Swap:          8.0Gi          0B       8.0Gi
+
+$ sudo du -h /var/lib/libvirt/images/lab3103/*.qcow2
+2.0G  base.qcow2
+1.2G  molde.qcow2
+138M  pc1.qcow2
+137M  pc2.qcow2
+136M  pc3.qcow2
+138M  pc4.qcow2
+146M  ra.qcow2
+140M  rb.qcow2
+139M  rc.qcow2
+137M  rd.qcow2
+141M  srv.qcow2
