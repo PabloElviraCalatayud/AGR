@@ -1,0 +1,8 @@
+auto lo
+iface lo inet loopback
+
+# Red de servidores 10.100.0.0/24
+auto eth0
+iface eth0 inet static
+    address 10.100.0.11/24
+    gateway 10.100.0.1

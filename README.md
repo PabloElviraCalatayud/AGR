@@ -8,16 +8,17 @@ dos partes y las memorias (fuentes y PDF).
 .
 ├── parte1-vagrant/           Parte 1: servidor web Node.js en una VM con Vagrant
 │   └── Vagrantfile
-├── parte2-kvm/               Parte 2: red del laboratorio 3103 con QEMU-KVM
-│   ├── agr_kvm.py            script de despliegue (Python + lxml)
-│   ├── topologia.json        plan de numeración (redes, máquinas, rutas)
-│   ├── plantilla_vm.xml      XML base de Moodle
-│   ├── imagen/               imagen de disco de Moodle (no versionada)
-│   └── guest/                ficheros que se instalan en las VMs
+├── parte2/                  Parte 2: red del laboratorio 3103 con QEMU-KVM
+│   ├── plantilla.xml         XML base de Moodle
+│   ├── xml/                  XML de las 9 VMs (y del molde)
+│   ├── red.sh                prepara el anfitrión: KVM, bridges, IP de PC Profesor
+│   ├── molde/                preparación de la imagen común (FRR, Node, servidor)
+│   └── vm/<vm>/              configuración de dentro de cada VM
 └── doc/
     ├── entregables/          PDF finales a entregar
     │   └── src/              fuentes Markdown de las memorias
-    ├── development/          material de trabajo (enunciado, plano, medidas)
+    ├── development/          material de trabajo (enunciado, plano, medidas,
+    │                         capturas, histórico de la primera versión con script)
     └── build_pdf.sh          regenera los PDF
 ```
 
@@ -68,33 +69,30 @@ Problemas habituales:
 - **Secure Boot activo:** `modprobe vboxdrv` falla. Desactívelo en la BIOS
   (o registre la clave MOK) y ejecute `sudo /sbin/vboxconfig`.
 - **`VERR_VMX_IN_VMX_ROOT_MODE` / `VERR_SVM_IN_USE`:** hay VMs de KVM
-  encendidas; apáguelas con `sudo ./agr_kvm.py parar` (en `parte2-kvm/`).
+  encendidas; apáguelas (`sudo virsh shutdown <vm>`). El `Vagrantfile`
+  descarga KVM y carga VirtualBox antes de arrancar.
 
 ## Parte 2 – QEMU-KVM
 
-Réplica del laboratorio 3103: 4 routers con FRR (RA–RD), servidor web
-(10.100.0.11), un PC en cada una de las 4 redes inferiores, y el anfitrión
-como PC del profesor (10.200.0.2).
+Réplica del laboratorio 3103 montada a mano con KVM/libvirt a partir de la
+imagen y el XML de Moodle: 4 routers con FRR (RA–RD), servidor web SRV
+(10.100.0.11:3000), un PC en cada una de las 4 redes inferiores (PC1–PC4) y el
+anfitrión como PC Profesor (10.200.0.2). Detalles en `parte2/README.md`.
 
 ```bash
-cd parte2-kvm
-sudo ./agr_kvm.py instalar       # dependencias (una vez)
-sudo ./agr_kvm.py crear          # imagen base + bridges + 9 VMs
-sudo ./agr_kvm.py probar         # plan de pruebas de conectividad
-sudo ./agr_kvm.py consumo        # RAM, CPU y disco de cada VM
-sudo ./agr_kvm.py consola rc     # consola de una VM (root / agr)
-sudo ./agr_kvm.py destruir
+cd parte2
+./red.sh                                   # tras cada reinicio del anfitrión
+for vm in srv ra rb rc rd pc1 pc2 pc3 pc4; do sudo virsh start $vm; done
+sudo virsh console ra                      # root / agr ; salir con Ctrl+]
 ```
 
-Las VMs parten de la **imagen de disco de Moodle** (Ubuntu 20.04): cópiela en
-`parte2-kvm/imagen/agr-vm-base.qcow2` (no se versiona por su tamaño; si no
-está, se descarga del Release `imagen-moodle` del repositorio).
+Verificado: las 9 VMs llegan a las 18 IPs del laboratorio y al servidor web.
 
-KVM y VirtualBox no pueden usarse a la vez; las herramientas cargan y
-descargan los módulos solas, basta con apagar las VMs de la otra parte
-(`vagrant halt` o `sudo ./agr_kvm.py parar`).
+KVM y VirtualBox no pueden usarse a la vez: apague las VMs de la otra parte
+(`vagrant halt` o `sudo virsh shutdown <vm>`); `red.sh` y el `Vagrantfile`
+cargan y descargan los módulos.
 
-Detalles en `doc/entregables/memoria_parte2.pdf`.
+**Pendiente:** el script que automatice el despliegue de `parte2/`.
 
 ## Documentación
 
@@ -102,15 +100,12 @@ Todo en `doc/entregables/` (PDF) con sus fuentes Markdown en `doc/entregables/sr
 
 | Documento | Contenido |
 |---|---|
-| `manual_usuario` | Manual de uso: instalación, órdenes, pruebas y resolución de problemas de ambas partes |
-| `creacion_maquinas_virtuales` | Paso a paso de cómo se crean y configuran todas las VMs (Vagrant y KVM), con las órdenes manuales equivalentes |
-| `memoria_parte1` | Parte 1: configuración, pruebas y estudio de consumo |
-| `memoria_parte2` | Parte 2: arquitectura, plan de numeración, tablas de enrutamiento, plan de pruebas y resultados |
 | `guia_paso_a_paso` | **La práctica completa paso a paso**: cada orden, qué hace, qué debe salir y los problemas encontrados |
 | `requisitos_punto_a_punto` | **Cada requisito del enunciado**: cita, qué pide, cómo se ha implementado, dónde está, cómo se comprueba y estado |
+| `red_laboratorio_3103` | Memoria de la red de la parte 2: diagrama, plan de numeración, tablas de rutas, tabla de accesos, plan de pruebas, consumo e incidencias |
 | `diagrama_red_lab3103` (PDF/PNG) | Diagrama de red: equipos, bridges, tarjetas, puertos del plano e IPs |
 | `diagrama_construccion_lab3103` (PDF/PNG) | El mismo diagrama con la orden con que se creó cada enlace y cada equipo |
-| `red_laboratorio_3103` | Red montada a mano: diagrama, esquema de conexiones, tablas de rutas, tabla de accesos y plan de pruebas |
-| `explicacion_tecnica` | Conexión de todas las redes, cumplimiento del enunciado punto a punto, proceso completo y explicación detallada de cada script |
+| `memoria_parte1` | Parte 1: configuración, pruebas y estudio de consumo |
+| `manual_usuario` | Manual de uso de las dos partes |
 
 Para regenerar los PDF: `doc/build_pdf.sh` (requiere `pandoc` y Chromium/Chrome).

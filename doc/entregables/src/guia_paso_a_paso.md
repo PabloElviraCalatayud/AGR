@@ -742,7 +742,7 @@ los pasos 0–11 es lo que el script tiene que automatizar:
 
 | Paso manual | Lo que hará el script |
 |---|---|
-| 0, 3 | Preparar `base.qcow2` y la imagen molde (o reutilizarla si ya existe) |
+| 0–3 | Preparar `base.qcow2` y la imagen molde (o reutilizarla si ya existe) |
 | 4–10 (bridges) | Crear los 9 bridges, la IP del anfitrión y sus rutas (`red.sh`) |
 | 4–9 (discos) | `qemu-img create -b molde.qcow2` por VM |
 | 4–9 (XML) | Generar cada XML desde la plantilla de Moodle (con `lxml`, como aconseja el enunciado) |
@@ -750,7 +750,10 @@ los pasos 0–11 es lo que el script tiene que automatizar:
 | 4–11 (dentro) | Escribir en cada disco `hostname`, `/etc/network/interfaces`, `99-router.conf`, `frr.conf` y activar `frr`/`ssr-server` antes de arrancar |
 | 12 | Ejecutar el plan de pruebas y guardar el informe |
 
-El repositorio ya contiene una implementación automatizada (`parte2-kvm/`,
-ver `requisitos_punto_a_punto.pdf`); el paso pendiente es alinearla con el
-diseño manual descrito aquí (nombres `br-…`, tarjetas `ethN`,
-`/etc/network/interfaces`) o adoptarla tal cual.
+Todos los ficheros que usa ese script ya están en `parte2/`: la plantilla, los
+XML de cada VM, `red.sh`, la preparación del molde (`molde/`) y la
+configuración interna de cada VM (`vm/<vm>/`: `hostname`, `interfaces`,
+`99-router.conf`, `frr.conf`).
+
+(Una primera versión automatizada con otro diseño se conserva como material de
+trabajo en `doc/development/historico_script/`.)

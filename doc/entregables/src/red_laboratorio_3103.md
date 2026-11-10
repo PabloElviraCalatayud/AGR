@@ -251,9 +251,10 @@ Medido el 10/11/2026 con las 9 VMs en marcha, en el anfitrión (Ryzen 7 7700X,
   unos 690 MiB y no 1 GB.
 - El servidor ocupa algo más (760 MiB) por el proceso de Node.js.
 - El anfitrión sigue con 20 GiB disponibles.
-- Comparación: la versión del script asigna 384 MB a cada router y PC y 768 MB
-  al servidor, y ocupa 3.6 GiB en total. Reducir la RAM de los XML a esos
-  valores bajaría el consumo casi a la mitad.
+- Ajuste posible: con 384 MB por router y PC y 768 MB para el servidor (lo que
+  usó la primera versión automatizada, `doc/development/historico_script/`),
+  las 9 VMs ocuparon 3.6 GiB. Bajar `<memory>` en los XML reduciría el consumo
+  casi a la mitad.
 
 ## 5.2. Disco
 

@@ -1,0 +1,8 @@
+auto lo
+iface lo inet loopback
+
+# RED 3 10.0.3.0/24
+auto eth0
+iface eth0 inet static
+    address 10.0.3.10/24
+    gateway 10.0.3.1

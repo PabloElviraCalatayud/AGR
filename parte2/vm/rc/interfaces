@@ -1,0 +1,17 @@
+auto lo
+iface lo inet loopback
+
+# ge0/0/5 - Enlace RB-RC 10.2.0.0/30
+auto eth0
+iface eth0 inet static
+    address 10.2.0.2/30
+
+# ge0/0/1 - RED 1 10.0.1.0/24
+auto eth1
+iface eth1 inet static
+    address 10.0.1.1/24
+
+# ge0/0/2 - RED 2 10.0.2.0/24
+auto eth2
+iface eth2 inet static
+    address 10.0.2.1/24

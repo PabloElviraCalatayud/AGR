@@ -18,20 +18,14 @@ Para **cada requisito** del enunciado
 - **Estado:** ✅ cumplido · ⚠️ cumplido con matices o pendiente de confirmar ·
   ❌ no cumplido.
 
-En la parte 2 hay **dos implementaciones** que cumplen los mismos requisitos:
+La parte 2 está implementada **a mano** en `parte2/`: plantilla de Moodle, XML
+de las 9 VMs, `red.sh` (prepara el anfitrión), preparación del molde y
+configuración interna de cada VM. El proceso completo está en
+`guia_paso_a_paso.pdf`. **Queda pendiente el script que automatice todo el
+despliegue**; los requisitos que dependen de él se marcan así.
 
-| | Implementación manual | Implementación automatizada |
-|---|---|---|
-| Qué es | La red montada a mano, paso a paso | El script `agr_kvm.py` |
-| Dónde | `parte2/` (XML de las 9 VMs, `plantilla.xml`, `red.sh`) + `guia_paso_a_paso.pdf` | `parte2-kvm/` |
-| Para qué | Entender y documentar cada pieza | El entregable que pide el enunciado («un script que despliegue…») |
-| Bridges | `br-srv`, `br-ab`, … | `agr-srv`, `agr-ab`, … |
-| Nombres de las VMs | `srv`, `ra`, …, `pc4` | `agr-srv`, `agr-ra`, …, `agr-pc4` |
-| Tarjetas en las VMs | `eth0`, `eth1`, `eth2` (orden del XML) | Renombradas como el plano (`ge0-0-1`…) por MAC |
-| Configuración de red | `/etc/network/interfaces` (ifupdown) | Servicio `agr-net` (lee `/etc/agr/node.conf`) |
-| Software común | VM molde preparada a mano | Imagen base construida con `virt-customize` |
-| XML | Plantilla de Moodle + `sed` | Plantilla de Moodle + `lxml` |
-| Pruebas | 180/180 pings, 10/10 web | 50/50 pruebas automáticas |
+(Una primera versión automatizada con otro diseño se conserva como material de
+trabajo en `doc/development/historico_script/`; no forma parte de la entrega.)
 
 # PARTE 1 — Virtualización de servicios web con Vagrant (págs. 1–2)
 
@@ -219,10 +213,10 @@ encuentra en Moodle).»
 - **Escenarios:** a partir del plano, réplica completa (38 VMs) y reducida
   (9 VMs).
 - **Variantes:** con 1 GB por VM y con asignación ajustada.
-- **Contraste con datos reales:** las medidas de la parte 2 con KVM dan 9 VMs
-  = 3.6 GiB.
+- **Contraste con datos reales:** la red de la parte 2 (9 VMs con KVM, 1 GB
+  asignado a cada una) ocupa 6.1 GiB de RAM y unos 4.5 GB de disco.
 
-**Dónde está:** `memoria_parte1.pdf` §4.4 y `memoria_parte2.pdf` §6.
+**Dónde está:** `memoria_parte1.pdf` §4.4 y `red_laboratorio_3103.pdf` §5.
 
 **Estado:** ✅
 
@@ -288,31 +282,26 @@ todas las máquinas y las redes del plano usando KVM.
 
 **Cómo se ha implementado:**
 
-- **Manual:** pasos 0–11 de la guía. Sirve para entender cada pieza y es la
-  base del diseño.
-- **Automatizada:** `sudo ./agr_kvm.py crear`. El script:
-  1. construye la imagen base;
-  2. crea los 9 bridges y la IP y rutas del anfitrión;
-  3. por cada VM: disco diferencial, configuración del disco, XML,
-     `virsh define` y `virsh start`;
-  4. espera a que estén listas.
+- **La red, montada a mano con QEMU-KVM** (pasos 0–11 de la guía):
+  - discos qcow2 encadenados (`base ← molde ← VM`);
+  - 9 bridges;
+  - 9 XML;
+  - `virsh define/start`;
+  - configuración interna de cada VM.
+- **Parte ya automatizada:** `parte2/red.sh` prepara el anfitrión:
+  - carga KVM;
+  - crea los 9 bridges;
+  - quita el filtrado del cortafuegos sobre los bridges;
+  - da al anfitrión su IP y sus rutas.
 
-  Otras órdenes del script: `estado`, `probar`, `consumo`, `consola`, `parar`,
-  `arrancar`, `destruir`, `instalar` y `xml`.
+**Dónde está:** `parte2/` y `guia_paso_a_paso.pdf`.
 
-**Dónde está:** `parte2-kvm/agr_kvm.py` y `parte2-kvm/topologia.json` (el
-plano de numeración en datos).
+**Cómo se comprueba:** `sudo virsh list --all` → las 9 VMs `running`.
 
-**Cómo se comprueba:** `sudo ./agr_kvm.py crear` + `estado` muestran las 9 VMs
-`running`.
-
-**Estado:** ⚠️
-
-- El script funciona: 50/50 pruebas en el entorno de pruebas con una imagen
-  Ubuntu 20.04 equivalente a la de Moodle, y en tu PC con la imagen anterior.
-- **Pendiente:** ejecutarlo en tu PC con la imagen de Moodle real.
-- **Pendiente:** decidir si se alinea con el diseño manual (nombres `br-…`,
-  `ethN`, `/etc/network/interfaces`).
+**Estado:** ⚠️ La red está desplegada con QEMU-KVM y verificada, pero el
+despliegue de las VMs (discos, XML, `define`/`start`, configuración interna)
+aún no está en un script. **Pendiente:** escribir el script que automatice los
+pasos de la guía.
 
 ## R2.2. Lenguaje del script
 
@@ -321,9 +310,9 @@ aconsejamos el uso de Python y Bash…»
 
 **Cómo se ha implementado:**
 
-- **Python 3:** orquestación en el anfitrión.
-- **Bash/sh:** lo que se ejecuta dentro de las VMs (`guest/*.sh`) y `red.sh`
-  en la versión manual.
+- **Bash:** `red.sh` y `molde/preparar_molde.sh`.
+- **Python:** el script de despliegue pendiente usará Python con `lxml`
+  (ver R2.4).
 
 **Estado:** ✅
 
@@ -332,26 +321,33 @@ aconsejamos el uso de Python y Bash…»
 **Enunciado (pág. 3):** «El script correspondiente deberá generar los ficheros
 XML necesarios para desplegar todas las máquinas virtuales.»
 
-**Qué hay que implementar:** un XML de libvirt por VM, a partir de la
+**Qué hay que implementar:** un XML de libvirt por VM, generado a partir de la
 plantilla.
 
-**Cómo se ha implementado:**
+**Cómo se ha implementado:** cada XML sale de la plantilla de Moodle con tres
+sustituciones `sed`:
 
-- **Manual:** plantilla de Moodle + tres `sed` (`<name>`, ruta del disco y
-  `<source bridge>`), más un bloque `<interface>` por cada red adicional, en
-  orden.
-- **Script (`generar_xml()`):** parte de la misma plantilla y fija `<name>`,
-  `<memory>`, `<vcpu>` y el disco. Pone una `<interface>` por red, con MAC
-  fija y nombre de *tap*, y añade el canal del agente QEMU y `keymap="es"`.
-  Los XML resultantes validan con `virt-xml-validate`.
+- `<name>XXX</name>`;
+- la ruta del disco `/mnt/tmp/XXX/XXX.qcow2`;
+- `<source bridge="XXX"/>`.
 
-**Dónde está:**
+Además, se añade un bloque `<interface>` por cada red adicional, en orden
+(`eth0`, `eth1`, `eth2`). Ejemplo, RD:
 
-- **Manual:** `parte2/xml/*.xml`.
-- **Script:** `parte2-kvm/agr_kvm.py` (`generar_xml`); ejemplos generados en
-  `doc/development/parte2/xml_generados/`.
+```bash
+sed -e 's|<name>XXX</name>|<name>rd</name>|' \
+    -e 's|/mnt/tmp/XXX/XXX.qcow2|/var/lib/libvirt/images/lab3103/rd.qcow2|' \
+    -e 's|<source bridge="XXX"/>|<source bridge="br-bd"/>|' \
+    -e 's|</interface>|</interface>\n<interface type="bridge">...br-red3...\n...br-red4...</interface>|' \
+    plantilla.xml > xml/rd.xml
+```
 
-**Estado:** ✅
+Los 10 XML (9 VMs + molde) validan con `virt-xml-validate`.
+
+**Dónde está:** `parte2/plantilla.xml` y `parte2/xml/*.xml`.
+
+**Estado:** ⚠️ Los XML están generados a partir de la plantilla, con órdenes y
+no a mano, pero todavía no los genera el script de despliegue.
 
 ## R2.4. Uso de una librería XML (lxml)
 
@@ -359,20 +355,20 @@ plantilla.
 Python para leer y modificar ficheros XML. Se recomienda utilizar la librería
 lxml.etree…»
 
-**Cómo se ha implementado:** `from lxml import etree` en `generar_xml()`:
-`etree.parse` de la plantilla, `find`, `set`, `SubElement`, `insert` y
-`tostring`. La versión manual usa `sed` para entender los cambios; el script
-los hace con `lxml`.
+**Cómo se ha implementado:** los XML actuales se generan con `sed`.
 
-**Estado:** ✅
+**Estado:** ❌ Pendiente. El script de despliegue hará los mismos cambios con
+`lxml.etree`: `parse` de la plantilla, `find("name").text`,
+`find("devices/disk/source").set("file", …)` y un `SubElement("interface")`
+por bridge.
 
 ## R2.5. Las cuatro subredes inferiores pueden ser un único PC
 
 **Enunciado (pág. 3):** «…las cuatro subredes reflejadas en el dibujo pueden
 consistir en un único PC (qué puede ser incluso el anfitrión si se desea).»
 
-**Cómo se ha implementado:** un PC por red (PC1–PC4, 10.0.N.10/24, con puerta
-de enlace 10.0.N.1).
+**Cómo se ha implementado:** un PC por red (PC1–PC4, 10.0.N.10/24, puerta de
+enlace 10.0.N.1).
 
 **Estado:** ✅
 
@@ -381,19 +377,12 @@ de enlace 10.0.N.1).
 **Enunciado (pág. 4):** «El script deberá no solamente desplegar todas las
 máquinas…»
 
-**Cómo se ha implementado:** 9 VMs en total.
-
-| Tipo | Máquinas |
-|---|---|
-| Routers | RA, RB, RC, RD |
-| Servidor | SRV |
-| PCs | PC1, PC2, PC3, PC4 |
-
-El PC Profesor es el anfitrión.
+**Cómo se ha implementado:** 9 VMs (RA, RB, RC, RD, SRV, PC1–PC4), cada una con
+su disco diferencial sobre el molde y su XML. El PC Profesor es el anfitrión.
 
 **Cómo se comprueba:** `sudo virsh list --all` → 9 en `running`.
 
-**Estado:** ✅
+**Estado:** ✅ (desplegadas; su automatización forma parte de R2.1).
 
 ## R2.7. Instalar la *Software Routing Suite* en los routers
 
@@ -402,14 +391,15 @@ aquellas máquinas que actúen como router…»
 
 **Cómo se ha implementado:**
 
-- **Qué se instala:** FRRouting (FRR 7.2.1), sucesor de Quagga. Va en la base
-  común (`apt install frr`), desactivado.
-- **Dónde se activa:** solo en RA–RD, con `systemctl enable --now frr`.
-- **Cómo se administra:** con `vtysh`, con la misma sintaxis que un router
-  Cisco.
+- **Instalación:** FRRouting (FRR 7.2.1), sucesor de Quagga, se instaló en el
+  molde con `apt install frr` y se dejó desactivado.
+- **Activación:** solo en RA–RD (`systemctl enable --now frr`).
+- **Administración:** con `vtysh`.
 
-**Cómo se comprueba:** `vtysh -c 'show version'` en cada router;
-`systemctl is-active frr` → `active` en routers e `inactive` en PCs y SRV.
+**Dónde está:** `parte2/molde/preparar_molde.sh` y `parte2/vm/r*/frr.conf`.
+
+**Cómo se comprueba:** `systemctl is-active frr` → `active` en los routers. En
+la verificación final, `vtysh -c 'show ip route'` responde en los cuatro.
 
 **Estado:** ✅ Si el profesor exigiera Quagga literalmente, Ubuntu 20.04 aún lo
 incluye y el cambio es directo.
@@ -421,8 +411,7 @@ para lograr conectividad global.»
 
 **Cómo se ha implementado:**
 
-- **Rutas:** las del plano, en `vtysh` (`ip route …`) y guardadas con
-  `write memory` en `/etc/frr/frr.conf`.
+- **Rutas del plano** en `vtysh` (`ip route …`), guardadas con `write memory`:
 
   | Router | Rutas |
   |---|---|
@@ -431,31 +420,34 @@ para lograr conectividad global.»
   | RC | 0/0 → 10.2.0.1 |
   | RD | 0/0 → 10.3.0.1 |
 
-- **Reenvío IP:** activado en los routers (`/etc/sysctl.d/99-router.conf`).
-- **Puertas de enlace:** los PCs y SRV usan su router como puerta de enlace
-  (`gateway` en `/etc/network/interfaces`).
-- **Observación:** a la tabla de RA del plano le falta 10.1.0.0/30
-  (directamente conectada).
+- **Reenvío IP:** activado en los routers (`99-router.conf`).
+- **Puertas de enlace:** PCs y SRV con `gateway` en `/etc/network/interfaces`.
+
+**Dónde está:** `parte2/vm/<vm>/frr.conf`, `99-router.conf` e `interfaces`.
 
 **Cómo se comprueba:**
 
-- `show ip route` en los 4 routers;
-- traceroutes con los caminos del plano;
-- 180/180 pings.
+- `show ip route` en los 4 routers, con capturas reales del 10/11/2026;
+- traceroutes por los caminos del plano;
+- las 9 VMs con 18/18.
 
-**Estado:** ✅ Capturas reales de los cuatro routers en la verificación final
-del 10/11/2026 (`doc/development/parte2/verificacion_final.txt`).
+**Estado:** ✅
 
 ## R2.9. Servicio web en el servidor
 
 **Enunciado (pág. 4):** «En el servidor se deberá desplegar un servicio web,
 para el que puede reciclar el código que empleó en el apartado anterior.»
 
-**Cómo se ha implementado:** el mismo SSR-master-server y el mismo servicio
-systemd que en la parte 1. Está instalado en la base común y activado solo en
-SRV (`systemctl enable --now ssr-server`), en 10.100.0.11:3000.
+**Cómo se ha implementado:** el mismo SSR-master-server y el mismo tipo de
+servicio systemd que en la parte 1.
 
-**Cómo se comprueba:** `ss -tlnp | grep 3000` → `*:3000 node`.
+- Se instaló en el molde (Node.js 22, `git clone`, `npm install`).
+- Solo está activado en SRV (`systemctl enable --now ssr-server`), en
+  10.100.0.11:3000.
+
+**Dónde está:** `parte2/molde/preparar_molde.sh` y `parte2/molde/ssr-server.service`.
+
+**Cómo se comprueba:** `ss -tln | grep 3000` → `*:3000`.
 
 **Estado:** ✅
 
@@ -467,8 +459,8 @@ acceso al servicio web del servidor.»
 
 **Cómo se comprueba:**
 
-- `curl` y `/record` desde PC1 y PC4 crearon sus CSV en SRV;
-- en la prueba final, PC1–PC4 obtienen `web=200`.
+- PC1–PC4 obtienen `web=200` en la verificación final;
+- `/record` desde PC1 y PC4 creó sus CSV en SRV.
 
 **Estado:** ✅
 
@@ -480,14 +472,17 @@ la parte inferior.»
 
 **Cómo se ha implementado:**
 
-- **Conexión:** el anfitrión es el **PC Profesor** del plano, con
-  10.200.0.2/30 en `br-prof`, unido a RA ge0/0/5 (10.200.0.1).
-- **Rutas:** lleva rutas a las 8 redes del laboratorio vía RA, sin tocar su
-  salida a Internet.
-- **Persistencia:** lo hace `red.sh` (manual) o `crear_bridges()` (script).
+- **Conexión:** el anfitrión es el PC Profesor del plano, con 10.200.0.2/30 en
+  `br-prof`, unido a RA ge0/0/5 (10.200.0.1).
+- **Rutas:** a las 8 redes del laboratorio vía RA, sin tocar la salida a
+  Internet del anfitrión.
+- **Quién lo hace:** `red.sh`.
 
-**Cómo se comprueba:** `curl http://10.100.0.11:3000/` → HTML; `/record`
-creó `profesor-…csv`; `web=200`.
+**Cómo se comprueba:**
+
+- `curl http://10.100.0.11:3000/` → HTML;
+- `/record` creó `profesor-…csv` y `final-…csv`;
+- `traceroute` a PC4 → RA → RB → RD → PC4.
 
 **Estado:** ✅
 
@@ -496,10 +491,14 @@ creó `profesor-…csv`; `web=200`.
 **Enunciado (pág. 4):** «Como resultado de la práctica, deberá entregar el
 script correspondiente…»
 
-**Dónde está:** `parte2-kvm/` (script automatizado). `parte2/` (versión manual)
-está pendiente de subir al repositorio desde tu PC.
+**Dónde está:** `parte2/`:
 
-**Estado:** ⚠️ Sube `parte2/` y decide qué versión es la definitiva.
+- `red.sh`;
+- `molde/preparar_molde.sh`;
+- XML;
+- configuraciones de cada VM.
+
+**Estado:** ⚠️ Falta el script de despliegue completo (R2.1).
 
 ## R2.13. Memoria: plan de numeración con dibujo
 
@@ -510,8 +509,7 @@ numeración que ha dispuesto para la infraestructura (haga un dibujo)…»
 
 - `red_laboratorio_3103.pdf` §1–2;
 - `diagrama_red_lab3103.pdf/png`;
-- `diagrama_construccion_lab3103.pdf/png`;
-- `memoria_parte2.pdf` §3.
+- `diagrama_construccion_lab3103.pdf/png`.
 
 **Estado:** ✅
 
@@ -520,7 +518,8 @@ numeración que ha dispuesto para la infraestructura (haga un dibujo)…»
 **Enunciado (pág. 4):** «…así como las tablas de enrutamiento que ha
 configurado en los distintos router.»
 
-**Dónde está:** `red_laboratorio_3103.pdf` §2.3 y `memoria_parte2.pdf` §4.
+**Dónde está:** `red_laboratorio_3103.pdf` §2.3 y
+`doc/development/parte2/verificacion_final.txt`.
 
 **Estado:** ✅ Las cuatro tablas son capturas reales (10/11/2026).
 
@@ -531,23 +530,17 @@ llevado a cabo para confirmar que existe conectividad global.»
 
 **Cómo se ha implementado:**
 
-- **Manual:** pruebas en cada paso de la construcción, más la prueba final en
-  los 10 equipos: 18 IPs + web cada uno, 180/180 pings y 10/10 accesos web.
-  Repetida el 10/11/2026 tras reiniciar el anfitrión: las 9 VMs 18/18 y
-  web=200, con capturas en `doc/development/parte2/capturas/`.
-- **Script:** `sudo ./agr_kvm.py probar` (50 pruebas):
-  - anfitrión → 17 interfaces y la web;
-  - cada PC → servidor (ping, HTTP, `/record`, traceroute);
-  - entre las 4 redes inferiores;
-  - tablas de rutas.
-
-  Resultado: 50/50.
+- **Durante la construcción:** pruebas en cada paso (ping, traceroute, `curl`).
+- **Prueba final:** cada equipo hace ping a las 18 IPs del laboratorio y una
+  petición HTTP al servidor. Primero en los 10 equipos (180/180 y 10/10); se
+  repitió el 10/11/2026 tras reiniciar el anfitrión, con las 9 VMs en 18/18 y
+  `web=200`.
 
 **Dónde está:**
 
 - `red_laboratorio_3103.pdf` §3–4;
-- `doc/development/parte2/pruebas.txt`;
-- `memoria_parte2.pdf` §5.
+- `doc/development/parte2/verificacion_final.txt`;
+- `doc/development/parte2/capturas/`.
 
 **Estado:** ✅
 
@@ -560,21 +553,18 @@ así como en el Software Routing Suite.»
 **Cómo se ha implementado:**
 
 - **En las VMs:**
+  - imagen molde común con discos diferenciales (4.5 GB en total frente a unos
+    29 GB copiando la imagen entera);
   - hostname de cada equipo;
-  - imagen base común con discos diferenciales;
-  - servicio web con usuario sin privilegios y reinicio automático.
-- **Solo en el script:**
-  - interfaces renombradas como en el plano;
-  - información al iniciar sesión;
-  - agente QEMU para las pruebas;
-  - SSH con clave;
-  - teclado español.
-- **En FRR:** hostname de cada router, configuración integrada guardada con
-  `write memory`, `ip forwarding` y descripciones de interfaz (en el script).
+  - servicio web con usuario sin privilegios y reinicio automático;
+  - comentarios con el puerto del plano en `/etc/network/interfaces`.
+- **En FRR:** hostname de cada router y configuración integrada guardada con
+  `write memory`.
 
-**Estado:** ⚠️ La parte de FRR es escasa. Propuestas para reforzarla:
+**Estado:** ⚠️ Es poco, sobre todo en FRR. Propuestas:
 
 - ruta *blackhole* en RA para cortar el bucle RA↔RB con destinos desconocidos;
+- descripciones de interfaz;
 - contraseña y banner en `vtysh`;
 - rutas de respaldo (*floating static*);
 - variante con OSPF.
@@ -586,13 +576,11 @@ la imagen de disco y el fichero XML que se puede encontrar en Moodle.»
 
 **Cómo se ha implementado:**
 
-- **Manual:** `base.qcow2` es la imagen de Moodle (Ubuntu 20.04.5) y todas las
-  VMs parten de `plantilla.xml` (la de Moodle).
-- **Script:** usa por defecto `parte2-kvm/imagen/agr-vm-base.qcow2` (la de
-  Moodle) y `plantilla_vm.xml`.
+- `base.qcow2` es la imagen de Moodle (Ubuntu 20.04.5), intacta y en solo
+  lectura.
+- Todos los XML parten de `plantilla.xml`, la de Moodle.
 
-**Estado:** ✅ en la versión manual. ⚠️ El script falta ejecutarlo en tu PC con
-esa imagen.
+**Estado:** ✅
 
 ## R2.18. Usuario root / agr; cambiar hostname y contraseña
 
@@ -610,13 +598,12 @@ de cada VM (`srv`, `ra`, …, `pc4`).
 los bridge desde las subredes inferiores (RED 1, 2, 3 y 4), para que pueda
 comprobar el flujo de tráfico hacia el exterior.»
 
-**Cómo se ha implementado:** se ha seguido el **plano**, que sitúa el PC
-Profesor en 10.200.0.0/30 junto a RA. El propio enunciado contempla el caso:
-«…en el caso de que ésta no forme parte ya de una de las subredes de la parte
+**Cómo se ha implementado:** se ha seguido el plano, que sitúa el PC Profesor
+en 10.200.0.0/30 junto a RA. El propio enunciado contempla esa opción: «…en el
+caso de que ésta no forme parte ya de una de las subredes de la parte
 inferior».
 
-**Estado:** ⚠️ Es una recomendación, no un requisito. Si se quiere seguir al
-pie de la letra:
+**Estado:** ⚠️ Es una recomendación. Para seguirla al pie de la letra:
 
 - dar al anfitrión una IP en `br-red1` (por ejemplo 10.0.1.100/24);
 - poner rutas vía 10.0.1.1.
@@ -627,12 +614,7 @@ pie de la letra:
 muestre en pantalla se pueden imprimir utilizando la función print/printf…
 para la depuración… Se puede utilizar el módulo "logging" de Python.»
 
-**Cómo se ha implementado:** en `agr_kvm.py`:
-
-- `info()` usa `print` para los mensajes de progreso;
-- `logging` se usa para las trazas, visibles con `-v`.
-
-**Estado:** ✅
+**Estado:** ❌ Pendiente: se aplicará en el script de despliegue en Python.
 
 ## R2.21. Gestionar las VMs con `virsh define|start|shutdown|destroy`
 
@@ -642,12 +624,12 @@ define|start|shutdown|destroy"…»
 
 **Cómo se ha implementado:**
 
-| Acción | Manual | Script |
-|---|---|---|
-| Registrar | `virsh define` | `crear` |
-| Arrancar | `virsh start` | `crear`, `arrancar` |
-| Apagar ordenadamente | `virsh shutdown` | `parar` |
-| Apagar de golpe y borrar | `virsh destroy` + `undefine` | `destruir` |
+| Acción | Orden |
+|---|---|
+| Registrar | `virsh define` |
+| Arrancar | `virsh start` |
+| Apagar ordenadamente | `virsh shutdown` |
+| Apagar de golpe | `virsh destroy` (+ `undefine` para borrar) |
 
 **Estado:** ✅
 
@@ -657,13 +639,10 @@ define|start|shutdown|destroy"…»
 distintas máquinas virtuales, puede emplear el comando xterm… Tenga en cuenta
 que los comandos anteriores deben ser ejecutarlos en background…»
 
-**Cómo se ha implementado:**
+**Cómo se ha implementado:** consolas con `sudo virsh console <vm>`.
 
-- **Manual:** `sudo virsh console <vm>`.
-- **Script:** `sudo ./agr_kvm.py consola ra rb` abre un `xterm` por VM en
-  segundo plano (equivalente a `&`).
-
-**Estado:** ✅
+**Estado:** ⚠️ Es opcional («si desea»). El script de despliegue podrá abrir un
+`xterm` por VM en segundo plano.
 
 ## R2.23. `virt-cat` / `virt-ls` para inspeccionar sin entrar
 
@@ -671,12 +650,9 @@ que los comandos anteriores deben ser ejecutarlos en background…»
 ayudar a listar los ficheros o volcar su contenido sin necesidad de acceder a
 la máquina virtual.»
 
-**Cómo se ha implementado:**
-
-- **Script:** usa `virt-customize`, de la misma familia libguestfs, para
-  *escribir* la configuración en los discos sin arrancarlos.
-- **Inspección:** se usaron `virt-cat` y `virt-ls` para examinar la imagen de
-  Moodle antes de adaptarla (Ubuntu 20.04, ifupdown, `/boot`).
+**Cómo se ha implementado:** se usaron `virt-cat` y `virt-ls` para examinar la
+imagen de Moodle antes de prepararla: versión de Ubuntu, `/etc/network`,
+`/etc/netplan` y `/boot`.
 
 **Estado:** ✅ (es opcional).
 
@@ -685,15 +661,18 @@ la máquina virtual.»
 | Parte | ✅ | ⚠️ | ❌ |
 |---|---|---|---|
 | Parte 1 (13 requisitos) | 12 | 1 (captura de `watch`, opcional) | 0 |
-| Parte 2 (23 requisitos) | 18 | 5 | 0 |
+| Parte 2 (23 requisitos) | 15 | 6 | 2 (`lxml` y `print`/`logging`: van con el script) |
 
 **Pendientes:**
 
-1. **Subir `parte2/`** (versión manual) al repositorio desde tu PC.
-2. **Ejecutar el script con la imagen de Moodle en tu PC** y decidir si se
-   alinea con el diseño manual.
-3. **(Opcional)** Más configuración de FRR (R2.16).
-4. **(Opcional)** Anfitrión en una red inferior (R2.19) y captura de `watch`
+1. **Script de despliegue** (R2.1, R2.3, R2.4, R2.12, R2.20, R2.22): en Python
+   con `lxml`, que automatice los pasos de la guía con los ficheros de
+   `parte2/`:
+   - crear discos;
+   - generar los XML;
+   - escribir la configuración de cada VM;
+   - `define`/`start`;
+   - ejecutar las pruebas.
+2. **(Opcional)** Más configuración en FRR (R2.16).
+3. **(Opcional)** Anfitrión en una red inferior (R2.19) y captura de `watch`
    (R1.11).
-5. **Memoria final de la parte 2:** integrar la construcción manual
-   (`guia_paso_a_paso`) y `red_laboratorio_3103`.

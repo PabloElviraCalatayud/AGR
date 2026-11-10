@@ -10,11 +10,12 @@ lang: es
 ```
 AGR/
 ├── parte1-vagrant/Vagrantfile     Parte 1: VM con el servidor web (VirtualBox)
-├── parte2-kvm/                    Parte 2: red del laboratorio 3103 (KVM)
-│   ├── agr_kvm.py                 script de despliegue
-│   ├── topologia.json             plan de numeración (editable)
-│   ├── plantilla_vm.xml           XML base de Moodle
-│   └── guest/                     ficheros que se instalan en las VMs
+├── parte2/                        Parte 2: red del laboratorio 3103 (KVM)
+│   ├── plantilla.xml              XML base de Moodle
+│   ├── xml/                       XML de cada VM
+│   ├── red.sh                     prepara el anfitrión tras cada reinicio
+│   ├── molde/                     preparación de la imagen común
+│   └── vm/<vm>/                   configuración de dentro de cada VM
 └── doc/
     ├── entregables/               PDF finales (+ fuentes en src/)
     ├── development/               enunciado, plano, medidas, informes
@@ -30,12 +31,11 @@ git clone https://github.com/PabloElviraCalatayud/AGR.git
 cd AGR
 ```
 
-> **VirtualBox (parte 1) y KVM (parte 2) no pueden ejecutarse a la vez.** Las
-> herramientas lo gestionan solas: `agr_kvm.py` descarga VirtualBox y carga
-> KVM antes de arrancar las VMs y descarga KVM al `parar`/`destruir`; el
-> `Vagrantfile` hace lo contrario antes de `vagrant up` (pide la contraseña de
-> `sudo`). Sólo hay que apagar las VMs de una parte antes de usar la otra:
-> `vagrant halt` o `sudo ./agr_kvm.py parar`.
+> **VirtualBox (parte 1) y KVM (parte 2) no pueden ejecutarse a la vez.**
+> `parte2/red.sh` descarga VirtualBox y carga KVM; el `Vagrantfile` hace lo
+> contrario antes de `vagrant up` (pide la contraseña de `sudo`). Sólo hay que
+> apagar las VMs de una parte antes de usar la otra: `vagrant halt` o
+> `sudo virsh shutdown <vm>`.
 
 # 2. Parte 1: servidor web con Vagrant
 
@@ -103,141 +103,91 @@ Dentro de la VM: `systemctl status ssr-server`, `journalctl -u ssr-server -f`,
 | `No usable default provider` / `vboxdrv kernel module is not loaded` | `sudo /sbin/vboxconfig`; si falla, ver filas siguientes |
 | `modprobe vboxdrv failed` con Secure Boot | Desactivar Secure Boot en la BIOS (o registrar la clave MOK) y repetir `sudo /sbin/vboxconfig` |
 | VirtualBox no compila para un kernel nuevo | Instalar la última versión (`virtualbox-7.2`) |
-| `VERR_VMX_IN_VMX_ROOT_MODE` / `VERR_SVM_IN_USE` | Hay VMs de KVM encendidas: `sudo ./agr_kvm.py parar` (en `parte2-kvm/`) |
+| `VERR_VMX_IN_VMX_ROOT_MODE` / `VERR_SVM_IN_USE` | Hay VMs de KVM encendidas: apagarlas con `sudo virsh shutdown <vm>` |
 | `A Vagrant environment ... is required` | Ejecutar desde `parte1-vagrant/` |
 | `Vagrant cannot forward the specified ports` (8080 ocupado) | Liberar el puerto 8080 en el anfitrión o cambiar `PUERTO_HOST` en el `Vagrantfile` |
 
 # 3. Parte 2: red del laboratorio con KVM
 
+La red se construye a mano siguiendo `guia_paso_a_paso.pdf` (pasos 0–12).
+Este apartado resume cómo usarla una vez construida.
+
 ## 3.1. Instalación (una sola vez)
 
 ```bash
-cd parte2-kvm
-sudo ./agr_kvm.py instalar
+sudo apt install -y qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients bridge-utils
+sudo systemctl enable --now libvirtd
 ```
 
-Instala QEMU/KVM, libvirt, libguestfs, `lxml` y las herramientas de red, y
-activa `libvirtd`.
+Discos en `/var/lib/libvirt/images/lab3103/`: `base.qcow2` (imagen de Moodle),
+`molde.qcow2` (software común) y uno por VM.
 
-**Imagen de las VMs.** Se usa la imagen de disco de Moodle (Ubuntu 20.04,
-`root`/`agr`), como recomienda el enunciado. Cópiela en
-`parte2-kvm/imagen/agr-vm-base.qcow2`; si no está, `crear` la descarga del
-Release `imagen-moodle` del repositorio. No se versiona en git por su tamaño
-(~2 GB).
-
-## 3.2. Órdenes del script
-
-Todas desde `parte2-kvm/` y con `sudo` (salvo `xml`). `-v` muestra trazas.
-
-| Orden | Qué hace |
-|---|---|
-| `sudo ./agr_kvm.py instalar` | Instala las dependencias del anfitrión (una vez) |
-| `sudo ./agr_kvm.py crear` | Crea la imagen base (sólo la 1ª vez), los bridges, las 9 VMs y las arranca. Si ya existían, las recrea |
-| `sudo ./agr_kvm.py crear rc pc1` | Recrea sólo esas máquinas |
-| `sudo ./agr_kvm.py estado` | Estado, rol, RAM e IPs de cada VM |
-| `sudo ./agr_kvm.py probar [--informe f.txt] [--detalle]` | Plan de pruebas de conectividad (ver §3.4) |
-| `sudo ./agr_kvm.py consola ra pc1` | Abre un `xterm` con la consola serie de cada VM |
-| `sudo ./agr_kvm.py consumo [--informe f.txt]` | RAM real (RSS), CPU y disco de cada VM y total |
-| `sudo ./agr_kvm.py parar [vms]` | Apaga ordenadamente (y libera KVM para VirtualBox) |
-| `sudo ./agr_kvm.py arrancar [vms]` | Arranca (y recrea bridges y rutas del anfitrión, que se pierden al reiniciar el PC) |
-| `sudo ./agr_kvm.py destruir [vms]` | Borra VMs y discos; sin argumentos, también bridges y rutas |
-| `sudo ./agr_kvm.py destruir --todo` | Además borra la imagen base construida (no la de `imagen/`) |
-| `./agr_kvm.py xml --salida dir` | Sólo genera XML, `frr.conf` y `node.conf` para revisarlos |
-
-Opciones de `crear`:
-
-| Opción | Uso |
-|---|---|
-| `--imagen-base RUTA.qcow2` | Partir de otra imagen (por defecto, la de Moodle en `imagen/`); `ubuntu` usa Ubuntu 24.04 cloud |
-| `--reconstruir-base` | Rehacer la imagen base (p. ej. tras cambiar `guest/`) |
-| `--proxy http://host:puerto` | Proxy para descargar paquetes (redes universitarias) |
-| `--espera N` | Segundos máximos de espera al arranque (300) |
-| `--dir RUTA` (global) | Directorio de discos y XML (`/var/lib/libvirt/images/agr`) |
-
-## 3.3. Primer despliegue
+## 3.2. Arrancar el laboratorio (tras cada reinicio del anfitrión)
 
 ```bash
-cd parte2-kvm
-sudo ./agr_kvm.py -v crear     # 1ª vez ~5-10 min (construye la imagen base)
-sudo ./agr_kvm.py estado       # las 9 deben estar "running"
+cd ~/AGR/parte2
+./red.sh
+for vm in srv ra rb rc rd pc1 pc2 pc3 pc4; do sudo virsh start $vm; done
+sudo virsh list --all          # las 9 en "running"
 ```
 
-| VM | Rol | IP(s) | Acceso |
-|---|---|---|---|
-| `agr-ra` | router | 10.100.0.1, 10.200.0.1, 10.1.0.1 | `ssh root@10.200.0.1` |
-| `agr-rb` | router | 10.1.0.2, 10.2.0.1, 10.3.0.1 | `ssh root@10.1.0.2` |
-| `agr-rc` | router | 10.2.0.2, 10.0.1.1, 10.0.2.1 | `ssh root@10.2.0.2` |
-| `agr-rd` | router | 10.3.0.2, 10.0.3.1, 10.0.4.1 | `ssh root@10.3.0.2` |
-| `agr-srv` | servidor web :3000 | 10.100.0.11 | `ssh root@10.100.0.11` |
-| `agr-pc1..4` | PC | 10.0.1.10 … 10.0.4.10 | `ssh root@10.0.1.10` |
-| anfitrión | PC Profesor | 10.200.0.2 (bridge `agr-prof`) | — |
+`red.sh` carga KVM, crea los 9 bridges (`br-srv`, `br-prof`, `br-ab`, `br-bc`,
+`br-bd`, `br-red1`…`br-red4`), desactiva el filtrado del cortafuegos sobre los
+bridges y da al anfitrión su IP de PC Profesor (10.200.0.2) con las rutas al
+laboratorio. La configuración de dentro de las VMs se conserva en sus discos.
 
-Usuario `root`, contraseña `agr` en todas (consola). Por SSH se entra con la
-clave del usuario que ejecutó `sudo`, si tenía una en `~/.ssh/`.
+## 3.3. Órdenes de gestión
+
+| Acción | Orden |
+|---|---|
+| Ver el estado | `sudo virsh list --all` |
+| Entrar en una VM | `sudo virsh console <vm>` (root / agr; salir con `Ctrl+]`) |
+| Ver sus tarjetas y bridges | `sudo virsh domiflist <vm>` |
+| Ver qué hay en cada bridge | `bridge link` |
+| Apagar ordenadamente | `sudo virsh shutdown <vm>` |
+| Apagar de golpe | `sudo virsh destroy <vm>` |
+| Cambiar el XML de una VM | `shutdown` → esperar `shut off` → `undefine` → `define parte2/xml/<vm>.xml` → `start` |
+
+| VM | IPs | Acceso a la web |
+|---|---|---|
+| SRV | 10.100.0.11 | sirve en `:3000` |
+| RA | 10.100.0.1 · 10.1.0.1 · 10.200.0.1 | |
+| RB | 10.1.0.2 · 10.2.0.1 · 10.3.0.1 | |
+| RC | 10.2.0.2 · 10.0.1.1 · 10.0.2.1 | |
+| RD | 10.3.0.2 · 10.0.3.1 · 10.0.4.1 | |
+| PC1–PC4 | 10.0.N.10 (gw 10.0.N.1) | `curl http://10.100.0.11:3000/` |
+| Anfitrión | 10.200.0.2 | navegador: `http://10.100.0.11:3000` |
 
 ## 3.4. Pruebas
 
-Automáticas:
+En un router: `vtysh -c 'show ip route'`. En cualquier VM o en el anfitrión,
+la prueba de conectividad global (18 IPs + web):
 
 ```bash
-sudo ./agr_kvm.py probar --informe ../doc/development/parte2/pruebas.txt
+ok=0; fail=""; for ip in 10.100.0.11 10.100.0.1 10.200.0.1 10.200.0.2 10.1.0.1 10.1.0.2 10.2.0.1 10.2.0.2 10.3.0.1 10.3.0.2 10.0.1.1 10.0.1.10 10.0.2.1 10.0.2.10 10.0.3.1 10.0.3.10 10.0.4.1 10.0.4.10; do if ping -c1 -W1 $ip >/dev/null 2>&1; then ok=$((ok+1)); else fail="$fail $ip"; fi; done; echo "$(hostname): $ok/18, web=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://10.100.0.11:3000/), fallan:${fail:- ninguna}"
 ```
 
-Manuales:
+Resultado esperado: `18/18, web=200, fallan: ninguna`.
+
+## 3.5. Medir el consumo (en el anfitrión)
 
 ```bash
-curl http://10.100.0.11:3000/                # anfitrión -> servidor web (o en el navegador)
-traceroute -n 10.0.3.10                      # anfitrión -> PC3: RA, RB, RD, PC3
-sudo ./agr_kvm.py consola pc1                # en PC1 (root/agr):
-    curl http://10.100.0.11:3000/
-    traceroute -n 10.100.0.11                #   RC -> RB -> RA -> SRV
-    ping -c3 10.0.4.10                       #   PC1 -> PC4
-sudo ./agr_kvm.py consola rb                 # en RB:
-    vtysh -c 'show ip route'                 #   tabla de rutas (FRR)
-    vtysh -c 'show running-config'
-    vtysh -c 'show interface brief'
+ps -eo rss,args | grep "[g]uest=" | awk '{for(i=1;i<=NF;i++) if($i ~ /^guest=/){split($i,a,"[=,]"); printf "%-5s %6.0f MiB\n", a[2], $1/1024; s+=$1}} END {printf "TOTAL %6.0f MiB\n", s/1024}'
+free -h
+sudo du -h /var/lib/libvirt/images/lab3103/*.qcow2
+watch "ls -al /var/lib/libvirt/images/lab3103/"
 ```
 
-Salir de la consola: `Ctrl+]`. Al iniciar sesión, cada VM muestra su rol,
-interfaces, rutas y el estado de FRR o del servidor web.
-
-## 3.5. Modificar la topología
-
-Toda la red está en `topologia.json`: redes (bridge y CIDR), máquinas (rol,
-RAM, interfaces con IP, rutas). Tras editarlo:
-
-```bash
-./agr_kvm.py xml --salida /tmp/revision     # revisar lo que se va a generar
-sudo ./agr_kvm.py destruir && sudo ./agr_kvm.py crear
-```
-
-El script comprueba antes de desplegar que cada IP pertenece a la red a la que
-se conecta.
-
-## 3.6. Medir el consumo
-
-```bash
-sudo ./agr_kvm.py consumo --informe ../doc/development/parte2/consumo.txt
-```
-
-Muestra, por VM, la RAM asignada, la RAM real que ocupa en el anfitrión (RSS
-del proceso QEMU), el disco diferencial y el tiempo de CPU, y los totales
-frente a la RAM del anfitrión. Repitiéndolo durante `probar` se observa el
-crecimiento de los discos.
-
-## 3.7. Problemas frecuentes
+## 3.6. Problemas frecuentes
 
 | Síntoma | Causa / solución |
 |---|---|
-| Aviso `/dev/kvm no existe` | Virtualización (VT-x/AMD-V) desactivada en la BIOS; el script ya intenta cargar el módulo |
-| `No se encuentra la imagen de Moodle` | Copiarla en `parte2-kvm/imagen/agr-vm-base.qcow2` |
-| VMs no arrancan: `Permission denied` en el disco | El directorio no es accesible para `libvirt-qemu`: usar el `--dir` por defecto |
-| `virt-customize` no descarga paquetes | Falta `isc-dhcp-client` en el anfitrión o hace falta `--proxy` |
-| `supermin exited with error` | libguestfs necesita un kernel en `/boot`; ejecutar con `-v` para ver el detalle |
-| Un router no tiene rutas | `sudo ./agr_kvm.py crear <router>` lo recrea; la imagen ya reaplica la configuración de FRR al arrancar |
-| Tras reiniciar el PC no hay conectividad con las VMs | Los bridges no son persistentes: `sudo ./agr_kvm.py arrancar` |
-| Sin conectividad anfitrión ↔ lab con Docker instalado | El script desactiva `bridge-nf-call-iptables`; revisar `sudo iptables -L FORWARD` |
-| Aviso `VirtualBox está en uso` | Apagar la VM de la parte 1: `vagrant halt` |
+| `virsh start`: *Cannot get interface MTU on 'br-…'* | Los bridges no sobreviven al reinicio: `./red.sh` |
+| `virsh list --all` vacío | Falta `sudo` (sin él se usa `qemu:///session`) |
+| `virsh define`: *domain already exists with uuid* | `undefine` antes de `define` |
+| Un PC: *Destination Host Unreachable* hacia su puerta de enlace | Su router no está encendido o no tiene la IP en esa tarjeta |
+| Un router: *Destination Net Unreachable* | Faltan rutas en el kernel: `systemctl restart frr` (pasa tras `systemctl restart networking`) |
+| Sin conectividad anfitrión ↔ laboratorio | Comprobar `ip -br a show br-prof` y las rutas `via 10.200.0.1`; volver a lanzar `red.sh` |
 
 # 4. Regenerar la documentación
 
