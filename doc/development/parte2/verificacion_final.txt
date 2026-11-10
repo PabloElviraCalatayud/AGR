@@ -1,6 +1,7 @@
 Verificación final de la red del laboratorio 3103 (versión manual)
 Fecha: 2026-11-10 · Anfitrión: AMD Ryzen 7 7700X, 30 GiB RAM, Ubuntu 24.04, KVM
 Capturas de pantalla originales en capturas/verificacion_<vm>.webp
+Resultado: las 9 VMs 18/18 IPs y web=200 (162/162 pings, 9/9 accesos web)
 
 Orden ejecutada en cada VM:
   echo "===== $(hostname) ====="; ip -br -4 a | grep -v '^lo'; ip route;
@@ -78,8 +79,30 @@ default via 10.100.0.1 dev eth0 onlink
 LISTEN 0 511 *:3000 *:*
 CONECTIVIDAD: 18/18, web=200, fallan: ninguna
 
-===== pc1, pc2, pc3, pc4 =====
-(pendiente de captura en esta verificación; en la prueba anterior del 25/10: 18/18, web=200)
+===== pc1 =====
+eth0  UP  10.0.1.10/24
+default via 10.0.1.1 dev eth0 onlink
+10.0.1.0/24 dev eth0 proto kernel scope link src 10.0.1.10
+CONECTIVIDAD: 18/18, web=200, fallan: ninguna
+
+===== pc2 =====
+eth0  UP  10.0.2.10/24
+default via 10.0.2.1 dev eth0 onlink
+10.0.2.0/24 dev eth0 proto kernel scope link src 10.0.2.10
+CONECTIVIDAD: 18/18, web=200, fallan: ninguna
+
+===== pc3 =====
+eth0  UP  10.0.3.10/24
+default via 10.0.3.1 dev eth0 onlink
+10.0.3.0/24 dev eth0 proto kernel scope link src 10.0.3.10
+CONECTIVIDAD: 18/18, web=200, fallan: ninguna
+
+===== pc4 =====
+eth0  UP  10.0.4.10/24
+default via 10.0.4.1 dev eth0 onlink
+10.0.4.0/24 dev eth0 proto kernel scope link src 10.0.4.10
+CONECTIVIDAD: 18/18, web=200, fallan: ninguna
+
 
 ===== anfitrion =====
 $ traceroute -n 10.0.4.10

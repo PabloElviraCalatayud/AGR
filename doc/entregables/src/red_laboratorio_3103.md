@@ -204,8 +204,10 @@ echo "$H: $ok/18 OK, web=$web, fallan:${fail:- ninguna}"
 Resultado en los 10 equipos: `18/18 OK, web=200, fallan: ninguna`.
 
 La verificación se repitió el 10/11/2026 tras reiniciar el anfitrión
-(`red.sh` + arranque de las 9 VMs) con el mismo resultado en RA, RB, RC, RD y
-SRV: `18/18, web=200` (`doc/development/parte2/verificacion_final.txt`).
+(`red.sh` + arranque de las 9 VMs) con el mismo resultado en las 9 VMs (RA, RB, RC, RD,
+SRV, PC1, PC2, PC3 y PC4): `18/18, web=200, fallan: ninguna`. Salidas
+transcritas en `doc/development/parte2/verificacion_final.txt` y capturas de
+pantalla en `doc/development/parte2/capturas/`.
 
 ## 4.3. Caminos comprobados con `traceroute`
 

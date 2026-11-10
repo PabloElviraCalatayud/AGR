@@ -533,6 +533,8 @@ llevado a cabo para confirmar que existe conectividad global.»
 
 - **Manual:** pruebas en cada paso de la construcción, más la prueba final en
   los 10 equipos: 18 IPs + web cada uno, 180/180 pings y 10/10 accesos web.
+  Repetida el 10/11/2026 tras reiniciar el anfitrión: las 9 VMs 18/18 y
+  web=200, con capturas en `doc/development/parte2/capturas/`.
 - **Script:** `sudo ./agr_kvm.py probar` (50 pruebas):
   - anfitrión → 17 interfaces y la web;
   - cada PC → servidor (ping, HTTP, `/record`, traceroute);
@@ -688,12 +690,10 @@ la máquina virtual.»
 **Pendientes:**
 
 1. **Subir `parte2/`** (versión manual) al repositorio desde tu PC.
-2. **Verificación final de PC1–PC4:** pegar el bloque de comprobación en las
-   cuatro (routers y SRV ya verificados el 10/11/2026).
-3. **Ejecutar el script con la imagen de Moodle en tu PC** y decidir si se
+2. **Ejecutar el script con la imagen de Moodle en tu PC** y decidir si se
    alinea con el diseño manual.
-4. **(Opcional)** Más configuración de FRR (R2.16).
-5. **(Opcional)** Anfitrión en una red inferior (R2.19) y captura de `watch`
+3. **(Opcional)** Más configuración de FRR (R2.16).
+4. **(Opcional)** Anfitrión en una red inferior (R2.19) y captura de `watch`
    (R1.11).
-6. **Memoria final de la parte 2:** integrar la construcción manual
+5. **Memoria final de la parte 2:** integrar la construcción manual
    (`guia_paso_a_paso`) y `red_laboratorio_3103`.
