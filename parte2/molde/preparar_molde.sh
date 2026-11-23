@@ -7,6 +7,8 @@
 # Por eso no depende de que systemd esté en marcha.
 set -eo pipefail
 export DEBIAN_FRONTEND=noninteractive
+# virt-customize ejecuta con un PATH mínimo, sin /usr/local/bin
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # --- 2A. Software Routing Suite (FRR) y herramientas de red -------------------
 apt-get update
@@ -27,7 +29,8 @@ else
     ln -sf /opt/node/bin/node /opt/node/bin/npm /opt/node/bin/npx /usr/local/bin/
 fi
 rm -f /tmp/nodesource.sh
-node -v && npm -v
+node -v
+npm -v
 id -u nodeapp >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin nodeapp
 rm -rf /opt/ssr-master-server
 git clone --depth 1 https://github.com/gisai/SSR-master-server.git /opt/ssr-master-server
