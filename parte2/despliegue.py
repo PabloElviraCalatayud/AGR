@@ -217,7 +217,10 @@ def crear_disco(vm):
     cmd = ["virt-customize", "-q", "-a", disco,
            "--hostname", vm,
            "--upload", f"{cfg / 'interfaces'}:/etc/network/interfaces",
-           "--ssh-inject", f"root:file:{clave_ssh()}"]
+           "--ssh-inject", f"root:file:{clave_ssh()}",
+           # claves de host propias de cada VM (las imágenes cloud no las traen
+           # y sin ellas sshd no arranca)
+           "--run-command", "rm -f /etc/ssh/ssh_host_* && ssh-keygen -A"]
     rol = VMS[vm][0]
     if rol == "router":
         dropin = Path(tempfile.mkdtemp()) / "lab3103.conf"
