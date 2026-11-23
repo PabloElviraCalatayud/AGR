@@ -12,6 +12,7 @@ La explicación completa, paso a paso, está en
 
 ```
 parte2/
+├── despliegue.py            Script de despliegue automático (Python + lxml)
 ├── plantilla.xml            XML de Moodle (base de todas las VMs)
 ├── xml/                     XML de cada VM = plantilla + nombre, disco y bridges
 │   ├── molde.xml            VM temporal con Internet (red NAT "default")
@@ -49,7 +50,39 @@ parte2/
 | RD | eth0 br-bd 10.3.0.2/30 · eth1 br-red3 10.0.3.1/24 · eth2 br-red4 10.0.4.1/24 | 0/0 → 10.3.0.1 |
 | PC1–PC4 | eth0 br-redN 10.0.N.10/24 | gw 10.0.N.1 |
 
-## Uso
+## Despliegue automático: `despliegue.py`
+
+El script hace, sin intervención, lo mismo que los pasos 0–12 de la guía:
+
+| Orden | Qué hace |
+|---|---|
+| `sudo ./despliegue.py instalar` | Instala las dependencias del anfitrión (QEMU/KVM, libvirt, libguestfs, lxml, xterm…) |
+| `sudo ./despliegue.py molde` | Construye `molde.qcow2` sobre `base.qcow2` ejecutando `molde/preparar_molde.sh` dentro de la imagen con `virt-customize` (sólo si no existe; `--rehacer` para repetirlo) |
+| `sudo ./despliegue.py crear [vms]` | Prepara el anfitrión (KVM, 9 bridges, IP de PC Profesor y rutas), y por cada VM: disco diferencial sobre el molde, configuración de `vm/<vm>/` escrita dentro del disco, XML generado con `lxml` desde `plantilla.xml`, `virsh define` y `virsh start`. Espera a que todas estén listas |
+| `sudo ./despliegue.py probar [--informe f]` | Plan de pruebas: anfitrión → 17 IPs, web y `/record`; `traceroute` a cada PC; desde cada VM (por SSH) ping a las 18 IPs y web; tablas de rutas de los routers |
+| `sudo ./despliegue.py estado` | Estado de cada VM con sus tarjetas, bridges e IPs |
+| `sudo ./despliegue.py consola ra rb` | Un `xterm` con `virsh console` por VM, en segundo plano |
+| `sudo ./despliegue.py parar` / `arrancar` | `virsh shutdown` de todas / preparar el anfitrión y `virsh start` |
+| `sudo ./despliegue.py destruir [vms]` | `virsh destroy` + `undefine`, borra sus discos y, sin argumentos, bridges y rutas. Conserva `base.qcow2` y `molde.qcow2` |
+| `./despliegue.py xml` | Sólo genera los XML en `xml/` (no necesita root) |
+
+Opciones: `-v` (trazas de depuración con `logging`), `crear --ram MB` (RAM por
+VM; por defecto la de la plantilla, 1 GB), `molde --proxy URL`.
+
+Antes del primer uso hay que copiar la imagen de Moodle como
+`/var/lib/libvirt/images/lab3103/base.qcow2`. El script inyecta en cada VM una
+clave SSH propia (`/var/lib/libvirt/images/lab3103/clave_lab`) para las pruebas.
+
+Desplegar desde cero:
+
+```bash
+sudo ./despliegue.py instalar          # una vez
+sudo ./despliegue.py destruir          # si ya había VMs
+sudo ./despliegue.py crear
+sudo ./despliegue.py probar --informe /tmp/pruebas.txt
+```
+
+## Uso manual (sin el script)
 
 Tras cada reinicio del anfitrión:
 
@@ -60,17 +93,6 @@ sudo virsh list --all
 sudo virsh console ra            # root / agr ; salir con Ctrl+]
 ```
 
-Crear una VM desde cero (ejemplo, PC1):
-
-```bash
-cd /var/lib/libvirt/images/lab3103
-sudo qemu-img create -f qcow2 -F qcow2 -b molde.qcow2 pc1.qcow2
-sudo virsh define ~/AGR/parte2/xml/pc1.xml
-sudo virsh start pc1
-# dentro: hostnamectl set-hostname pc1 ; copiar vm/pc1/interfaces a
-#         /etc/network/interfaces ; systemctl restart networking
-```
-
 Cambiar el XML de una VM que ya existe: `virsh shutdown` → esperar a
 `shut off` → `virsh undefine` → `virsh define` → `virsh start`.
 
@@ -79,6 +101,5 @@ Cambiar el XML de una VM que ya existe: `virsh shutdown` → esperar a
 Verificado el 10/11/2026: las 9 VMs llegan a las 18 IPs del laboratorio y al
 servidor web (`doc/development/parte2/verificacion_final.txt`).
 
-**Pendiente:** el script que automatice el despliegue completo (lo pide el
-enunciado: «desarrollar un script que despliegue una red virtualizada» que
-«deberá generar los ficheros XML»).
+El despliegue automático con `despliegue.py` se comprueba con
+`sudo ./despliegue.py probar`.
