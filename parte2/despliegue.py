@@ -167,7 +167,7 @@ def limpiar_anfitrion():
 # --------------------------------------------------------------------------
 # XML (lxml, a partir de la plantilla de Moodle)
 # --------------------------------------------------------------------------
-def generar_xml(vm, disco, ram_mb=None):
+def generar_xml(vm, disco, ram_mb=None, emular=False):
     """Hace con lxml los mismos cambios que el sed de la guía."""
     try:
         from lxml import etree
@@ -181,7 +181,7 @@ def generar_xml(vm, disco, ram_mb=None):
     if ram_mb:
         for e in ("memory", "currentMemory"):
             raiz.find(e).text = str(ram_mb * 1024)            # KiB
-    if not Path("/dev/kvm").exists():
+    if emular:                       # sin KVM: emulación software (lenta)
         raiz.set("type", "qemu")
 
     # 3. una <interface> por bridge, en orden: eth0, eth1, eth2
@@ -305,7 +305,8 @@ def cmd_crear(args):
         virsh("undefine", vm, check=False)
         disco = crear_disco(vm)
         xml = xmls / f"{vm}.xml"
-        xml.write_text(generar_xml(vm, disco, args.ram))
+        xml.write_text(generar_xml(vm, disco, args.ram,
+                                   emular=not Path("/dev/kvm").exists()))
         virsh("define", xml)
         virsh("start", vm)
     esperar(seleccion(args), args.espera)

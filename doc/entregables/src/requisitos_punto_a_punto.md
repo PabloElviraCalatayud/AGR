@@ -198,7 +198,7 @@ reposo y con 25 000 peticiones a `/record`, con `ps`, `VBoxManage metrics`,
 | Peticiones atendidas | — | 122/s |
 
 **Dónde está:** `doc/development/parte1/consumo_raw.txt` y
-`memoria_parte1.pdf` §4.1–4.3.
+`memoria.pdf` §1.6 (memoria, CPU y disco).
 
 **Estado:** ✅
 
@@ -216,7 +216,7 @@ encuentra en Moodle).»
 - **Contraste con datos reales:** la red de la parte 2 (9 VMs con KVM, 1 GB
   asignado a cada una) ocupa 6.1 GiB de RAM y unos 4.5 GB de disco.
 
-**Dónde está:** `memoria_parte1.pdf` §4.4 y `red_laboratorio_3103.pdf` §5.
+**Dónde está:** `memoria.pdf` §1.6 (estimación del laboratorio) y `red_laboratorio_3103.pdf` §5.
 
 **Estado:** ✅
 
@@ -250,7 +250,7 @@ obtenidos con la capacidad de los servidores comerciales de la actualidad.»
 | Réplicas completas del laboratorio | ~22 sin optimizar, ~70 optimizadas |
 | Comparación con contenedores | Se discute en la memoria |
 
-**Dónde está:** `memoria_parte1.pdf` §4.5.
+**Dónde está:** `memoria.pdf` §1.6 (comparación con servidores comerciales).
 
 **Estado:** ✅
 
@@ -262,7 +262,7 @@ proporciona mediante su script.»
 
 **Dónde está:**
 
-- `memoria_parte1.pdf`;
+- `memoria.pdf`, parte 1;
 - `manual_usuario.pdf`;
 - `guia_paso_a_paso.pdf` (parte 1).
 
@@ -294,14 +294,18 @@ todas las máquinas y las redes del plano usando KVM.
   - quita el filtrado del cortafuegos sobre los bridges;
   - da al anfitrión su IP y sus rutas.
 
-**Dónde está:** `parte2/` y `guia_paso_a_paso.pdf`.
+- **Script de despliegue:** `parte2/despliegue.py` automatiza todos los pasos
+  de la guía. `sudo ./despliegue.py crear` prepara el anfitrión y crea los
+  discos, la configuración interna, los XML y las 9 VMs (`define`/`start`).
 
-**Cómo se comprueba:** `sudo virsh list --all` → las 9 VMs `running`.
+**Dónde está:** `parte2/despliegue.py`, `guia_paso_a_paso.pdf` y
+`memoria.pdf` §2.5.
 
-**Estado:** ⚠️ La red está desplegada con QEMU-KVM y verificada, pero el
-despliegue de las VMs (discos, XML, `define`/`start`, configuración interna)
-aún no está en un script. **Pendiente:** escribir el script que automatice los
-pasos de la guía.
+**Cómo se comprueba:** `sudo ./despliegue.py crear` y después
+`sudo ./despliegue.py estado` → las 9 VMs `running`. Captura:
+`doc/development/parte2/capturas/despliegue_crear.png`.
+
+**Estado:** ✅ Desplegado desde cero con el script el 23/11/2026.
 
 ## R2.2. Lenguaje del script
 
@@ -311,7 +315,7 @@ aconsejamos el uso de Python y Bash…»
 **Cómo se ha implementado:**
 
 - **Bash:** `red.sh` y `molde/preparar_molde.sh`.
-- **Python:** el script de despliegue pendiente usará Python con `lxml`
+- **Python:** `despliegue.py`, el script de despliegue, con `lxml`
   (ver R2.4).
 
 **Estado:** ✅
@@ -346,8 +350,11 @@ Los 10 XML (9 VMs + molde) validan con `virt-xml-validate`.
 
 **Dónde está:** `parte2/plantilla.xml` y `parte2/xml/*.xml`.
 
-**Estado:** ⚠️ Los XML están generados a partir de la plantilla, con órdenes y
-no a mano, pero todavía no los genera el script de despliegue.
+**Script:** `despliegue.py` genera los XML con `lxml`, con los mismos cambios
+(ver R2.4): en `crear` los escribe en `/var/lib/libvirt/images/lab3103/xml/`, y
+con `./despliegue.py xml` en `parte2/xml/`.
+
+**Estado:** ✅
 
 ## R2.4. Uso de una librería XML (lxml)
 
@@ -355,12 +362,18 @@ no a mano, pero todavía no los genera el script de despliegue.
 Python para leer y modificar ficheros XML. Se recomienda utilizar la librería
 lxml.etree…»
 
-**Cómo se ha implementado:** los XML actuales se generan con `sed`.
+**Cómo se ha implementado:** la función `generar_xml` de `despliegue.py`
+usa `lxml.etree`:
 
-**Estado:** ❌ Pendiente. El script de despliegue hará los mismos cambios con
-`lxml.etree`: `parse` de la plantilla, `find("name").text`,
-`find("devices/disk/source").set("file", …)` y un `SubElement("interface")`
-por bridge.
+- `parse` de la plantilla;
+- `find("name").text = vm`;
+- `find("devices/disk/source").set("file", …)`;
+- un elemento `interface` con `SubElement` para `source` y `model` por cada
+  bridge, en orden.
+
+**Dónde está:** `parte2/despliegue.py` (`generar_xml`) y `memoria.pdf` §2.5.
+
+**Estado:** ✅
 
 ## R2.5. Las cuatro subredes inferiores pueden ser un único PC
 
@@ -491,14 +504,13 @@ la parte inferior.»
 **Enunciado (pág. 4):** «Como resultado de la práctica, deberá entregar el
 script correspondiente…»
 
-**Dónde está:** `parte2/`:
+**Dónde está:** `parte2/despliegue.py`, con los ficheros que usa:
 
-- `red.sh`;
-- `molde/preparar_molde.sh`;
-- XML;
-- configuraciones de cada VM.
+- `plantilla.xml`;
+- `molde/preparar_molde.sh` y `molde/ssr-server.service`;
+- `vm/<vm>/` (configuración de cada VM).
 
-**Estado:** ⚠️ Falta el script de despliegue completo (R2.1).
+**Estado:** ✅
 
 ## R2.13. Memoria: plan de numeración con dibujo
 
@@ -507,6 +519,7 @@ numeración que ha dispuesto para la infraestructura (haga un dibujo)…»
 
 **Dónde está:**
 
+- `memoria.pdf` §2.3;
 - `red_laboratorio_3103.pdf` §1–2;
 - `diagrama_red_lab3103.pdf/png`;
 - `diagrama_construccion_lab3103.pdf/png`.
@@ -518,10 +531,12 @@ numeración que ha dispuesto para la infraestructura (haga un dibujo)…»
 **Enunciado (pág. 4):** «…así como las tablas de enrutamiento que ha
 configurado en los distintos router.»
 
-**Dónde está:** `red_laboratorio_3103.pdf` §2.3 y
-`doc/development/parte2/verificacion_final.txt`.
+**Dónde está:** `memoria.pdf` §2.4, `red_laboratorio_3103.pdf` §2.3,
+`doc/development/parte2/verificacion_final.txt` y
+`doc/development/parte2/pruebas_despliegue.txt`.
 
-**Estado:** ✅ Las cuatro tablas son capturas reales (10/11/2026).
+**Estado:** ✅ Las cuatro tablas son capturas reales: de la red manual
+(10/11/2026) y de la desplegada con el script (23/11/2026).
 
 ## R2.15. Plan de pruebas que confirme la conectividad global
 
@@ -535,10 +550,20 @@ llevado a cabo para confirmar que existe conectividad global.»
   petición HTTP al servidor. Primero en los 10 equipos (180/180 y 10/10); se
   repitió el 10/11/2026 tras reiniciar el anfitrión, con las 9 VMs en 18/18 y
   `web=200`.
+- **Con el script:** `sudo ./despliegue.py probar` ejecuta el plan
+  automáticamente en cuatro bloques:
+  - ping del anfitrión a las 17 IPs, web y `/record`;
+  - traceroute a cada PC;
+  - 18 IPs y web desde cada VM;
+  - `show ip route` de cada router.
+
+  Resultado del 23/11/2026: **36/36 pruebas correctas**.
 
 **Dónde está:**
 
+- `memoria.pdf` §2.6;
 - `red_laboratorio_3103.pdf` §3–4;
+- `doc/development/parte2/pruebas_despliegue.txt`;
 - `doc/development/parte2/verificacion_final.txt`;
 - `doc/development/parte2/capturas/`.
 
@@ -558,10 +583,20 @@ así como en el Software Routing Suite.»
   - hostname de cada equipo;
   - servicio web con usuario sin privilegios y reinicio automático;
   - comentarios con el puerto del plano en `/etc/network/interfaces`.
-- **En FRR:** hostname de cada router y configuración integrada guardada con
-  `write memory`.
+  - SSH con clave del anfitrión y claves de host propias en cada VM;
+  - herramientas de diagnóstico (`traceroute`, `tcpdump`, `curl`).
+- **En FRR:**
+  - hostname de cada router y configuración integrada guardada con
+    `write memory`;
+  - sólo los demonios necesarios (`zebra`, `staticd`);
+  - un *drop-in* de systemd que vuelve a aplicar la configuración (`vtysh -b`)
+    al arrancar;
+  - tiempos de `watchfrr` más tolerantes, para no perder las rutas si se
+    reinicia `staticd`.
 
-**Estado:** ⚠️ Es poco, sobre todo en FRR. Propuestas:
+**Dónde está:** `memoria.pdf` §2.8.
+
+**Estado:** ✅ Otras ampliaciones posibles:
 
 - ruta *blackhole* en RA para cortar el bucle RA↔RB con destinos desconocidos;
 - descripciones de interfaz;
@@ -614,7 +649,15 @@ inferior».
 muestre en pantalla se pueden imprimir utilizando la función print/printf…
 para la depuración… Se puede utilizar el módulo "logging" de Python.»
 
-**Estado:** ❌ Pendiente: se aplicará en el script de despliegue en Python.
+**Cómo se ha implementado:** en `despliegue.py`:
+
+- **`print`** (función `info`, prefijo `>>>`) para los mensajes que se
+  muestran siempre;
+- **`logging`** para las trazas: nivel INFO para el progreso y DEBUG, sólo con
+  `-v`, para cada orden ejecutada. Se eliminan sin tocar el código, quitando
+  `-v`.
+
+**Estado:** ✅
 
 ## R2.21. Gestionar las VMs con `virsh define|start|shutdown|destroy`
 
@@ -639,10 +682,12 @@ define|start|shutdown|destroy"…»
 distintas máquinas virtuales, puede emplear el comando xterm… Tenga en cuenta
 que los comandos anteriores deben ser ejecutarlos en background…»
 
-**Cómo se ha implementado:** consolas con `sudo virsh console <vm>`.
+**Cómo se ha implementado:** `sudo ./despliegue.py consola ra rb …` abre un
+`xterm -e "virsh console <vm>"` por VM en segundo plano
+(`subprocess.Popen` con `start_new_session`), así que el script no se queda
+detenido.
 
-**Estado:** ⚠️ Es opcional («si desea»). El script de despliegue podrá abrir un
-`xterm` por VM en segundo plano.
+**Estado:** ✅
 
 ## R2.23. `virt-cat` / `virt-ls` para inspeccionar sin entrar
 
@@ -661,18 +706,9 @@ imagen de Moodle antes de prepararla: versión de Ubuntu, `/etc/network`,
 | Parte | ✅ | ⚠️ | ❌ |
 |---|---|---|---|
 | Parte 1 (13 requisitos) | 12 | 1 (captura de `watch`, opcional) | 0 |
-| Parte 2 (23 requisitos) | 15 | 6 | 2 (`lxml` y `print`/`logging`: van con el script) |
+| Parte 2 (23 requisitos) | 22 | 1 (anfitrión en una red inferior, aconsejado) | 0 |
 
-**Pendientes:**
+**Pendientes (opcionales):**
 
-1. **Script de despliegue** (R2.1, R2.3, R2.4, R2.12, R2.20, R2.22): en Python
-   con `lxml`, que automatice los pasos de la guía con los ficheros de
-   `parte2/`:
-   - crear discos;
-   - generar los XML;
-   - escribir la configuración de cada VM;
-   - `define`/`start`;
-   - ejecutar las pruebas.
-2. **(Opcional)** Más configuración en FRR (R2.16).
-3. **(Opcional)** Anfitrión en una red inferior (R2.19) y captura de `watch`
-   (R1.11).
+1. Anfitrión en una red inferior (R2.19).
+2. Captura de `watch` durante la carga (R1.11).

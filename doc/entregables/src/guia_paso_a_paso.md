@@ -115,7 +115,7 @@ responde `Saving: …` y crea un CSV en `/opt/ssr-master-server/public/logs`.
 Con la VM encendida se midieron RSS del proceso `VBoxHeadless`,
 `VBoxManage metrics`, `free`, `df`, `top` y `du`, en reposo y con 25 000
 peticiones a `/record`. Datos en bruto en
-`doc/development/parte1/consumo_raw.txt`; análisis en `memoria_parte1.pdf`
+`doc/development/parte1/consumo_raw.txt`; análisis en `memoria.pdf` §1.6
 (§4): ~1.04 GiB de RAM en el anfitrión por la VM de 1 GB, ~0.06 % de CPU en
 reposo y ~2.3 % con carga, 2.1 GB de disco diferencial, estimación para el
 laboratorio completo y comparación con servidores comerciales.

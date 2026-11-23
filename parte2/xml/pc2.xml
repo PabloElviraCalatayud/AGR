@@ -1,4 +1,4 @@
-<domain type="qemu">
+<domain type="kvm">
   <name>pc2</name>
   <memory>1048576</memory>
   <currentMemory>1048576</currentMemory>

@@ -1,0 +1,111 @@
+Plan de pruebas del script de despliegue (sudo ./despliegue.py probar --informe /tmp/pruebas.txt)
+Anfitrión: AMD Ryzen 7 7700X, 30 GiB RAM, KVM · Despliegue desde cero: git clone, molde, crear
+Capturas de pantalla originales: capturas/despliegue_crear.png, capturas/despliegue_probar.png
+y capturas/despliegue_estado_informe.png (transcritas a continuación)
+
+$ sudo ./despliegue.py estado
+VM    ESTADO       ROL     TARJETAS
+srv   running      server  eth0:br-srv:10.100.0.11
+ra    running      router  eth0:br-srv:10.100.0.1  eth1:br-ab:10.1.0.1  eth2:br-prof:10.200.0.1
+rb    running      router  eth0:br-ab:10.1.0.2  eth1:br-bc:10.2.0.1  eth2:br-bd:10.3.0.1
+rc    running      router  eth0:br-bc:10.2.0.2  eth1:br-red1:10.0.1.1  eth2:br-red2:10.0.2.1
+rd    running      router  eth0:br-bd:10.3.0.2  eth1:br-red3:10.0.3.1  eth2:br-red4:10.0.4.1
+pc1   running      pc      eth0:br-red1:10.0.1.10
+pc2   running      pc      eth0:br-red2:10.0.2.10
+pc3   running      pc      eth0:br-red3:10.0.3.10
+pc4   running      pc      eth0:br-red4:10.0.4.10
+
+$ traceroute -n 10.0.4.10
+traceroute to 10.0.4.10 (10.0.4.10), 30 hops max, 60 byte packets
+ 1  10.200.0.1  0.222 ms  0.195 ms  0.186 ms
+ 2  10.1.0.2  0.273 ms  0.247 ms  0.241 ms
+ 3  10.3.0.2  0.373 ms  0.368 ms  0.361 ms
+ 4  10.0.4.10  0.537 ms  0.528 ms  0.518 ms
+
+$ curl -s -o /dev/null -w "%{http_code}\n" http://10.100.0.11:3000/
+200
+
+$ cat /tmp/pruebas.txt
+Plan de pruebas - 2026-11-23 20:05:06
+Resultado: 36/36 pruebas correctas
+
+[OK] anfitrion ping 10.100.0.11  (srv)
+[OK] anfitrion ping 10.100.0.1   (ra)
+[OK] anfitrion ping 10.1.0.1     (ra)
+[OK] anfitrion ping 10.200.0.1   (ra)
+[OK] anfitrion ping 10.1.0.2     (rb)
+[OK] anfitrion ping 10.2.0.1     (rb)
+[OK] anfitrion ping 10.3.0.1     (rb)
+[OK] anfitrion ping 10.2.0.2     (rc)
+[OK] anfitrion ping 10.0.1.1     (rc)
+[OK] anfitrion ping 10.0.2.1     (rc)
+[OK] anfitrion ping 10.3.0.2     (rd)
+[OK] anfitrion ping 10.0.3.1     (rd)
+[OK] anfitrion ping 10.0.4.1     (rd)
+[OK] anfitrion ping 10.0.1.10    (pc1)
+[OK] anfitrion ping 10.0.2.10    (pc2)
+[OK] anfitrion ping 10.0.3.10    (pc3)
+[OK] anfitrion ping 10.0.4.10    (pc4)
+[OK] anfitrion HTTP GET http://10.100.0.11:3000/ -> 200
+[OK] anfitrion HTTP GET /record (escritura de datos)
+[OK] anfitrion traceroute 10.0.1.10
+      traceroute to 10.0.1.10 (10.0.1.10), 30 hops max, 60 byte packets
+       1  10.200.0.1  0.051 ms
+       2  10.1.0.2  0.183 ms
+       3  10.2.0.2  0.299 ms
+       4  10.0.1.10  0.435 ms
+[OK] anfitrion traceroute 10.0.2.10
+      traceroute to 10.0.2.10 (10.0.2.10), 30 hops max, 60 byte packets
+       1  10.200.0.1  0.033 ms
+       2  10.1.0.2  0.080 ms
+       3  10.2.0.2  0.121 ms
+       4  10.0.2.10  0.293 ms
+[OK] anfitrion traceroute 10.0.3.10
+      traceroute to 10.0.3.10 (10.0.3.10), 30 hops max, 60 byte packets
+       1  10.200.0.1  0.041 ms
+       2  10.1.0.2  0.075 ms
+       3  10.3.0.2  0.179 ms
+       4  10.0.3.10  0.320 ms
+[OK] anfitrion traceroute 10.0.4.10
+      traceroute to 10.0.4.10 (10.0.4.10), 30 hops max, 60 byte packets
+       1  10.200.0.1  0.027 ms
+       2  10.1.0.2  0.067 ms
+       3  10.3.0.2  0.104 ms
+       4  10.0.4.10  0.234 ms
+[OK] srv       18/18 IPs, web=200
+[OK] ra        18/18 IPs, web=200
+[OK] rb        18/18 IPs, web=200
+[OK] rc        18/18 IPs, web=200
+[OK] rd        18/18 IPs, web=200
+[OK] pc1       18/18 IPs, web=200
+[OK] pc2       18/18 IPs, web=200
+[OK] pc3       18/18 IPs, web=200
+[OK] pc4       18/18 IPs, web=200
+[OK] ra        show ip route
+      Codes: K - kernel route, C - connected, S - static, R - RIP,
+      S>* 0.0.0.0/0 [1/0] via 10.1.0.2, eth1, 00:01:01
+      C>* 10.1.0.0/30 is directly connected, eth1, 00:01:01
+      C>* 10.100.0.0/24 is directly connected, eth0, 00:01:01
+      C>* 10.200.0.0/30 is directly connected, eth2, 00:01:01
+[OK] rb        show ip route
+      Codes: K - kernel route, C - connected, S - static, R - RIP,
+      S>* 0.0.0.0/0 [1/0] via 10.1.0.1, eth0, 00:00:58
+      S>* 10.0.1.0/24 [1/0] via 10.2.0.2, eth1, 00:00:58
+      S>* 10.0.2.0/24 [1/0] via 10.2.0.2, eth1, 00:00:58
+      S>* 10.0.3.0/24 [1/0] via 10.3.0.2, eth2, 00:00:58
+      S>* 10.0.4.0/24 [1/0] via 10.3.0.2, eth2, 00:00:58
+      C>* 10.1.0.0/30 is directly connected, eth0, 00:00:58
+      C>* 10.2.0.0/30 is directly connected, eth1, 00:00:58
+      C>* 10.3.0.0/30 is directly connected, eth2, 00:00:58
+[OK] rc        show ip route
+      Codes: K - kernel route, C - connected, S - static, R - RIP,
+      S>* 0.0.0.0/0 [1/0] via 10.2.0.1, eth0, 00:00:55
+      C>* 10.0.1.0/24 is directly connected, eth1, 00:00:55
+      C>* 10.0.2.0/24 is directly connected, eth2, 00:00:55
+      C>* 10.2.0.0/30 is directly connected, eth0, 00:00:55
+[OK] rd        show ip route
+      Codes: K - kernel route, C - connected, S - static, R - RIP,
+      S>* 0.0.0.0/0 [1/0] via 10.3.0.1, eth0, 00:00:52
+      C>* 10.0.3.0/24 is directly connected, eth1, 00:00:52
+      C>* 10.0.4.0/24 is directly connected, eth2, 00:00:52
+      C>* 10.3.0.0/30 is directly connected, eth0, 00:00:52

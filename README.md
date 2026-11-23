@@ -74,25 +74,29 @@ Problemas habituales:
 
 ## Parte 2 – QEMU-KVM
 
-Réplica del laboratorio 3103 montada a mano con KVM/libvirt a partir de la
-imagen y el XML de Moodle: 4 routers con FRR (RA–RD), servidor web SRV
-(10.100.0.11:3000), un PC en cada una de las 4 redes inferiores (PC1–PC4) y el
-anfitrión como PC Profesor (10.200.0.2). Detalles en `parte2/README.md`.
+Réplica del laboratorio 3103 con KVM/libvirt a partir de la imagen y el XML de
+Moodle: 4 routers con FRR (RA–RD), servidor web SRV (10.100.0.11:3000), un PC
+en cada una de las 4 redes inferiores (PC1–PC4) y el anfitrión como PC
+Profesor (10.200.0.2). Se despliega con `parte2/despliegue.py`. Detalles en
+`parte2/README.md`.
 
 ```bash
 cd parte2
-./red.sh                                   # tras cada reinicio del anfitrión
-for vm in srv ra rb rc rd pc1 pc2 pc3 pc4; do sudo virsh start $vm; done
-sudo virsh console ra                      # root / agr ; salir con Ctrl+]
+sudo cp <imagen de Moodle>.qcow2 /var/lib/libvirt/images/lab3103/base.qcow2
+sudo ./despliegue.py instalar     # dependencias (una vez)
+sudo ./despliegue.py molde        # software común (una vez, ~10 min)
+sudo ./despliegue.py crear        # bridges, discos, XML (lxml), define/start
+sudo ./despliegue.py probar --informe /tmp/pruebas.txt
+sudo ./despliegue.py consola ra   # xterm con la consola (root / agr)
+sudo ./despliegue.py parar | arrancar | destruir
 ```
 
-Verificado: las 9 VMs llegan a las 18 IPs del laboratorio y al servidor web.
+Verificado el 23/11/2026, desplegando desde cero: **36/36 pruebas**. Todas las
+VMs llegan a las 18 IPs del laboratorio y al servidor web.
 
 KVM y VirtualBox no pueden usarse a la vez: apague las VMs de la otra parte
-(`vagrant halt` o `sudo virsh shutdown <vm>`); `red.sh` y el `Vagrantfile`
-cargan y descargan los módulos.
-
-**Pendiente:** el script que automatice el despliegue de `parte2/`.
+(`vagrant halt` o `sudo ./despliegue.py parar`). `despliegue.py` y el
+`Vagrantfile` cargan y descargan los módulos.
 
 ## Documentación
 
@@ -100,12 +104,12 @@ Todo en `doc/entregables/` (PDF) con sus fuentes Markdown en `doc/entregables/sr
 
 | Documento | Contenido |
 |---|---|
+| `memoria` | **Memoria completa de las partes 1 y 2**: configuración, pruebas y consumo de la parte 1; plan de numeración, tablas de rutas, script, plan de pruebas con capturas, consumo e incidencias de la parte 2 |
 | `guia_paso_a_paso` | **La práctica completa paso a paso**: cada orden, qué hace, qué debe salir y los problemas encontrados |
 | `requisitos_punto_a_punto` | **Cada requisito del enunciado**: cita, qué pide, cómo se ha implementado, dónde está, cómo se comprueba y estado |
 | `red_laboratorio_3103` | Memoria de la red de la parte 2: diagrama, plan de numeración, tablas de rutas, tabla de accesos, plan de pruebas, consumo e incidencias |
 | `diagrama_red_lab3103` (PDF/PNG) | Diagrama de red: equipos, bridges, tarjetas, puertos del plano e IPs |
 | `diagrama_construccion_lab3103` (PDF/PNG) | El mismo diagrama con la orden con que se creó cada enlace y cada equipo |
-| `memoria_parte1` | Parte 1: configuración, pruebas y estudio de consumo |
 | `manual_usuario` | Manual de uso de las dos partes |
 
 Para regenerar los PDF: `doc/build_pdf.sh` (requiere `pandoc` y Chromium/Chrome).

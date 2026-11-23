@@ -235,7 +235,7 @@ Vagrant.configure("2") do |config|
     t.info = "Preparando el anfitrión para VirtualBox (puede pedir la contraseña de sudo)"
     t.run = { inline: "bash -c 'for m in kvm_amd kvm_intel kvm; do " \
                       "if lsmod | grep -q \"^$m \"; then sudo modprobe -r $m || " \
-                      "{ echo \"KVM en uso: apague las VMs de la parte 2 (agr_kvm.py parar)\"; exit 1; }; fi; done; " \
+                      "{ echo \"KVM en uso: apague las VMs de la parte 2 (cd parte2 && sudo ./despliegue.py parar)\"; exit 1; }; fi; done; " \
                       "lsmod | grep -q \"^vboxdrv \" || sudo modprobe vboxdrv'" }
   end
 
