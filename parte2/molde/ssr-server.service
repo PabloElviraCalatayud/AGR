@@ -6,7 +6,7 @@ After=network.target
 User=nodeapp
 WorkingDirectory=/opt/ssr-master-server
 # app.js ya hace app.listen(3000); "npm start" (bin/www) falla con EADDRINUSE
-ExecStart=/usr/bin/node app.js
+ExecStart=/usr/bin/env node app.js
 Restart=on-failure
 
 [Install]
