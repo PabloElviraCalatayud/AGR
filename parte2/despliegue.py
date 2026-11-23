@@ -367,10 +367,15 @@ def ping(ip, n=1):
 
 
 def ssh(ip, orden, timeout=60):
-    return sh(["ssh", "-i", CLAVE, "-o", "StrictHostKeyChecking=no",
-               "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=5",
-               "-o", "LogLevel=ERROR", f"root@{ip}", orden],
-              check=False, capture=True, timeout=timeout)
+    """Orden remota; si no contesta a tiempo devuelve código 124 (como timeout)."""
+    cmd = ["ssh", "-i", CLAVE, "-o", "StrictHostKeyChecking=no",
+           "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=5",
+           "-o", "LogLevel=ERROR", f"root@{ip}", orden]
+    try:
+        return sh(cmd, check=False, capture=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        log.debug("ssh %s: sin respuesta en %ss", ip, timeout)
+        return subprocess.CompletedProcess(cmd, 124, "", "timeout")
 
 
 def esperar(vms, timeout):
