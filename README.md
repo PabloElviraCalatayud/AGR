@@ -105,7 +105,7 @@ Todo en `doc/entregables/` (PDF) con sus fuentes Markdown en `doc/entregables/sr
 | Documento | Contenido |
 |---|---|
 | `como_ejecutar.txt` | Instrucciones breves para ejecutar las dos partes |
-| `memoria` | **Memoria completa de las partes 1 y 2** (con el código de los scripts): configuración, pruebas y consumo de la parte 1; plan de numeración, tablas de rutas, script, plan de pruebas con capturas, consumo e incidencias de la parte 2 |
+| `memoria` (DOCX y PDF) | **Memoria completa de las partes 1 y 2** (con el código de los scripts): configuración, pruebas y consumo de la parte 1; plan de numeración, tablas de rutas, script, plan de pruebas con capturas, consumo e incidencias de la parte 2 |
 | `guia_paso_a_paso` | **La práctica completa paso a paso**: cada orden, qué hace, qué debe salir y los problemas encontrados |
 | `requisitos_punto_a_punto` | **Cada requisito del enunciado**: cita, qué pide, cómo se ha implementado, dónde está, cómo se comprueba y estado |
 | `red_laboratorio_3103` | Memoria de la red de la parte 2: diagrama, plan de numeración, tablas de rutas, tabla de accesos, plan de pruebas, consumo e incidencias |
@@ -113,4 +113,4 @@ Todo en `doc/entregables/` (PDF) con sus fuentes Markdown en `doc/entregables/sr
 | `diagrama_construccion_lab3103` (PDF/PNG) | El mismo diagrama con la orden con que se creó cada enlace y cada equipo |
 | `manual_usuario` | Manual de uso de las dos partes |
 
-Para regenerar los PDF: `doc/build_pdf.sh` (requiere `pandoc` y Chromium/Chrome).
+Para regenerar los PDF: `doc/build_pdf.sh` (requiere `pandoc`, Chromium/Chrome y, para la memoria, LibreOffice y `python3-docx`).

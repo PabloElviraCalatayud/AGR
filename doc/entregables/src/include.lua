@@ -16,6 +16,9 @@ function CodeBlock(el)
   el.text = f:read("a"):gsub("\n$", "")
   f:close()
   el.attributes.include = nil
+  if el.attributes.titulo == nil then          -- título del cuadro (memoria_docx.py)
+    el.attributes.titulo = ruta:match("[^/]+$")
+  end
   table.insert(el.classes, "listado")   -- estilo de listado largo (estilo.css)
   return el
 end

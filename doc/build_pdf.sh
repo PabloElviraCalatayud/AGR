@@ -4,8 +4,9 @@
 #   doc/entregables/src/*.md  ->  doc/entregables/*.pdf
 #
 # Requisitos: pandoc y un navegador Chromium/Chrome (impresión a PDF), o bien
-# un motor LaTeX (xelatex) como alternativa.
-#   sudo apt install pandoc chromium-browser   # o: texlive-xetex
+# un motor LaTeX (xelatex) como alternativa. La memoria se genera en Word con
+# memoria_docx.py y se convierte a PDF con LibreOffice.
+#   sudo apt install pandoc chromium-browser libreoffice-writer python3-docx python3-pil
 set -eu
 DIR=$(cd "$(dirname "$0")" && pwd)
 SRC="$DIR/entregables/src"
@@ -25,6 +26,7 @@ navegador() {
 
 for md in "$SRC"/*.md; do
     name=$(basename "$md" .md)
+    [ "$name" = memoria ] && continue      # la memoria va en Word (abajo)
     pdf="$OUT/$name.pdf"
     echo ">>> $name.md -> $(basename "$pdf")"
     if BROWSER=$(navegador); then
@@ -40,4 +42,8 @@ for md in "$SRC"/*.md; do
             --resource-path="$SRC:$DIR" -o "$pdf"
     fi
 done
+# Memoria: Word con el formato de la memoria de referencia y PDF desde ese Word
+# (requiere python3-docx, python3-pil y LibreOffice)
+echo ">>> memoria.md -> memoria.docx y memoria.pdf"
+python3 "$SRC/memoria_docx.py"
 echo "PDF generados en $OUT"
