@@ -131,7 +131,7 @@ class Memoria:
         return (f'<w:hyperlink r:id="{rid}">'
                 f'{run(texto, color="1155cc", u=True, sz=sz)}</w:hyperlink>')
 
-    def imagen(self, ruta, ancho=1.0):
+    def _ruta_imagen(self, ruta):
         ruta = resolver(ruta)
         if ruta.suffix.lower() == ".svg":
             raise SystemExit(f"Word no admite SVG: use un PNG ({ruta})")
@@ -140,16 +140,58 @@ class Memoria:
             png = self.tmp / (ruta.stem + ".png")
             Image.open(ruta).convert("RGB").save(png)
             ruta = png
-        par = self.doc.add_paragraph()                   # se inserta antes de sectPr
-        par.add_run().add_picture(str(ruta), width=Emu(int(ANCHO * 635 * ancho)))
+        return str(ruta)
+
+    def _centrar(self, par):
         sangria = '<w:ind w:left="0" w:firstLine="0"/>'
         pp = parse_xml(f'<w:p {NS}>{ppr(ind=sangria, jc="center")}</w:p>')[0]
+        viejo = par._p.find(qn("w:pPr"))
+        if viejo is not None:
+            par._p.remove(viejo)
         par._p.insert(0, pp)
+
+    def imagen(self, imagenes):
+        """imagenes: [(ruta, fracción del ancho)]. Varias: en una fila, como
+        tabla sin bordes (una celda por imagen)."""
+        if len(imagenes) == 1:
+            ruta, ancho = imagenes[0]
+            par = self.doc.add_paragraph()               # se inserta antes de sectPr
+            par.add_run().add_picture(self._ruta_imagen(ruta),
+                                      width=Emu(int(ANCHO * 635 * ancho)))
+            self._centrar(par)
+        else:
+            n = len(imagenes)
+            tabla = self.doc.add_table(rows=1, cols=n)
+            celda_w = ANCHO // n
+            tbl = tabla._tbl
+            sin = '<w:{} w:val="nil"/>'
+            bordes = "".join(sin.format(b) for b in
+                             ("top", "left", "bottom", "right", "insideH", "insideV"))
+            tblpr = tbl.tblPr
+            for hijo in list(tblpr):
+                tblpr.remove(hijo)
+            for x in (f'<w:tblW {NS} w:w="{ANCHO}" w:type="dxa"/>',
+                      f'<w:jc {NS} w:val="center"/>',
+                      f'<w:tblBorders {NS}>{bordes}</w:tblBorders>',
+                      f'<w:tblLayout {NS} w:type="fixed"/>',
+                      f'<w:tblCellMar {NS}><w:left w:w="40" w:type="dxa"/>'
+                      f'<w:right w:w="40" w:type="dxa"/></w:tblCellMar>'):
+                tblpr.append(parse_xml(x))
+            for col in tbl.tblGrid.findall(qn("w:gridCol")):
+                col.set(qn("w:w"), str(celda_w))
+            for celda, (ruta, ancho) in zip(tabla.rows[0].cells, imagenes):
+                celda.width = Emu(celda_w * 635)
+                par = celda.paragraphs[0]
+                ancho_max = (celda_w - 80) * 635
+                par.add_run().add_picture(self._ruta_imagen(ruta),
+                                          width=Emu(min(int(ANCHO * 635 * ancho), ancho_max)))
+                self._centrar(par)
         self.vacio()
 
-    def codigo(self, texto, titulo=None):
-        """Cuadro de una celda: título a la derecha y una línea por párrafo."""
-        f = dict(fuente=MONO, sz=20)
+    def codigo(self, texto, titulo=None, sz=20):
+        """Cuadro de una celda: título a la derecha y una línea por párrafo.
+        sz: tamaño en medios puntos (20 = 10 pt, como en la referencia)."""
+        f = dict(fuente=MONO, sz=sz)
 
         def pp(jc=""):
             return (f'<w:pPr><w:widowControl w:val="0"/>'
@@ -301,19 +343,18 @@ def atributos(attr):
 
 
 def es_imagen(bloque):
+    """Figura, o párrafo formado sólo por imágenes (varias = en la misma fila)."""
     if bloque["t"] == "Figure":
         return True
-    return (bloque["t"] in ("Para", "Plain") and len(bloque["c"]) == 1
-            and bloque["c"][0]["t"] == "Image")
+    return (bloque["t"] in ("Para", "Plain") and bloque["c"]
+            and all(el["t"] in ("Image", "Space", "SoftBreak") for el in bloque["c"])
+            and any(el["t"] == "Image" for el in bloque["c"]))
 
 
-def imagen_de(bloque):
+def imagenes_de(bloque):
     if bloque["t"] == "Figure":
-        for b in bloque["c"][2]:
-            for el in b["c"]:
-                if el["t"] == "Image":
-                    return el
-    return bloque["c"][0]
+        return [el for b in bloque["c"][2] for el in b["c"] if el["t"] == "Image"]
+    return [el for el in bloque["c"] if el["t"] == "Image"]
 
 
 def anchos_tabla(colspecs, filas):
@@ -375,24 +416,28 @@ def convertir(ast, paginas=None):
                 m.p(m.inlines(inl, MARC), num=lista_puntos, keep=True,
                     ind='<w:ind w:left="720" w:hanging="360"/>', fuente=MARC)
         elif es_imagen(b):
-            img = imagen_de(b)
-            ancho = atributos(img["c"][0]).get("width", "100%")
-            ancho = float(ancho.rstrip("%")) / 100 if ancho.endswith("%") else 1.0
-            m.imagen(img["c"][2][0], ancho)
+            lista = []
+            for img in imagenes_de(b):
+                ancho = atributos(img["c"][0]).get("width", "100%")
+                ancho = float(ancho.rstrip("%")) / 100 if ancho.endswith("%") else 1.0
+                lista.append((img["c"][2][0], ancho))
+            m.imagen(lista)
         elif t in ("Para", "Plain"):
             texto = texto_plano(c).rstrip()
             if re.match(r"\[\d+\] ", texto):          # referencia bibliográfica
                 m.p(m.inlines(c), jc="left", ind='<w:ind w:left="0" w:firstLine="0"/>')
                 m.vacio()
                 continue
-            m.p(m.inlines(c), keep=texto.endswith(":"))
+            m.p(m.inlines(c), keep=texto.endswith(":") and sig is not None
+                and sig["t"] == "CodeBlock")
             # como en la referencia: «...:» va pegado al cuadro o imagen siguiente
             if not (texto.endswith(":") and sig and
                     (sig["t"] in ("CodeBlock", "Table") or es_imagen(sig))):
                 m.vacio()
         elif t == "CodeBlock":
             attr = atributos(c[0])
-            m.codigo(c[1], attr.get("titulo"))
+            # los listados completos de los scripts (include) van a 7 pt
+            m.codigo(c[1], attr.get("titulo"), 14 if "listado" in c[0][1] else 20)
         elif t == "BulletList":
             for item in c:
                 for sub in item:
