@@ -1,0 +1,44 @@
+CÓMO EJECUTAR LA PRÁCTICA 2
+===========================
+
+KVM y VirtualBox no pueden usarse a la vez: antes de cambiar de parte, apague
+las VMs de la otra (vagrant halt  /  sudo ./despliegue.py parar).
+
+
+PARTE 1 - Servidor web con Vagrant (necesita VirtualBox y Vagrant)
+------------------------------------------------------------------
+En la carpeta del Vagrantfile:
+
+    cd parte1-vagrant
+    vagrant up          crea la VM e instala Node.js y el servidor
+    vagrant ssh         entra en la VM; se muestra la configuración del servidor
+
+Abra en el navegador del anfitrión:  http://localhost:8080
+Desde dentro de la VM:               http://localhost:3000
+Por la red privada:                  http://192.168.56.10:3000
+
+El servidor arranca solo (servicio ssr-server). Si no responde, dentro de la VM:
+
+    sudo systemctl restart ssr-server
+    sudo systemctl status ssr-server
+
+Apagar / borrar:  vagrant halt  /  vagrant destroy -f
+
+
+PARTE 2 - Red del laboratorio 3103 con QEMU-KVM
+-----------------------------------------------
+1. Copie la imagen de disco de Moodle como:
+       /var/lib/libvirt/images/lab3103/base.qcow2
+
+2. En la carpeta parte2:
+
+    cd parte2
+    sudo ./despliegue.py instalar      dependencias (sólo la primera vez)
+    sudo ./despliegue.py molde         software común (sólo la primera vez, ~10 min, con Internet)
+    sudo ./despliegue.py crear         crea la red y arranca las 9 VMs
+    sudo ./despliegue.py probar        plan de pruebas (debe salir 36/36)
+
+Servidor web desde el anfitrión:  http://10.100.0.11:3000/
+Consola de una VM:                sudo ./despliegue.py consola ra    (usuario root, contraseña agr)
+Estado:                           sudo ./despliegue.py estado
+Apagar / arrancar / borrar:       sudo ./despliegue.py parar | arrancar | destruir

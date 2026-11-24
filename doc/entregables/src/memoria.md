@@ -1,81 +1,163 @@
 ---
-title: "Práctica 2 — Virtualización de servicios y de infraestructura de red"
-subtitle: "Administración y Gestión de Redes (AGR) · Memoria completa: parte 1 (Vagrant) y parte 2 (QEMU-KVM)"
-author: "Pablo Elvira Calatayud"
+title: "Práctica 2"
+subtitle: "Administración y Gestión de Redes · Virtualización de servicios web con Vagrant y virtualización de infraestructura de red con QEMU-KVM"
+author: "Participante: Pablo Elvira Calatayud"
 date: "Noviembre de 2026"
 lang: es
 ---
 
-# Introducción
+# 1. Configuración previa
 
-La práctica tiene dos partes:
+## 1.1. Equipo anfitrión
 
-1. **Virtualización de servicios web con Vagrant.** Un script Vagrant (Ruby)
-   despliega una máquina virtual Linux con el servidor Node.js
-   [SSR-master-server](https://github.com/gisai/SSR-master-server), accesible
-   en el puerto 3000 desde la VM y en el 8080 desde el exterior. Se estudia el
-   consumo de recursos y cuánto costaría virtualizar el laboratorio 3103.
-2. **Virtualización de infraestructura de red con QEMU-KVM.** Un script en
-   Python despliega la red del laboratorio 3103: 4 routers con la Software
-   Routing Suite FRR, un servidor web y un PC por cada red inferior. Tiene
-   rutas estáticas para lograr conectividad global y el anfitrión hace de
-   PC del profesor.
+Las dos partes de la práctica se han realizado en el mismo equipo físico:
 
-El repositorio es autocontenido:
-
-| Ruta | Contenido |
+| Elemento | Valor |
 |---|---|
-| `parte1-vagrant/Vagrantfile` | Entregable de la parte 1 |
-| `parte2/despliegue.py` | Entregable de la parte 2 (script de despliegue) |
-| `parte2/plantilla.xml`, `parte2/molde/`, `parte2/vm/` | Plantilla XML de Moodle, software común y configuración de cada VM que usa el script |
-| `doc/entregables/` | Esta memoria y los documentos complementarios en PDF (guía paso a paso, requisitos punto a punto, red del laboratorio, diagramas, manual de uso) |
-| `doc/development/` | Enunciado, plan de numeración, medidas en bruto, capturas de pantalla y salidas de las pruebas |
+| Procesador | AMD Ryzen 7 7700X, 8 núcleos / 16 hilos, con AMD-V |
+| Memoria | 30 GiB de RAM |
+| Sistema operativo | Ubuntu 24.04 (Linux) |
+| Parte 1 | VirtualBox 7.2.20 y Vagrant 2.4.9 |
+| Parte 2 | QEMU-KVM, libvirt y libguestfs (`virt-customize`) |
 
-Ambas partes se probaron en el mismo anfitrión: **AMD Ryzen 7 7700X
-(8 núcleos / 16 hilos), 30 GiB de RAM, Ubuntu**, con VirtualBox 7.2.20 y
-Vagrant 2.4.9 en la parte 1 y QEMU-KVM + libvirt en la parte 2.
+Todo el material está en un repositorio Git autocontenido:
 
-# Parte 1 — Servicio web virtualizado con Vagrant
+```
+.
+├── parte1-vagrant/Vagrantfile    Parte 1: script Vagrant (Ruby)
+├── parte2/                       Parte 2: script de despliegue con QEMU-KVM
+│   ├── despliegue.py             script (Python + lxml)
+│   ├── plantilla.xml             XML de Moodle
+│   ├── molde/                    software común de las VMs
+│   └── vm/<vm>/                  configuración de dentro de cada VM
+└── doc/
+    ├── entregables/              esta memoria (PDF) y sus fuentes
+    └── development/              enunciado, plano, medidas y capturas
+```
 
-## 1.1. Objetivo y entregable
+## 1.2. Vagrant y VirtualBox (parte 1)
 
-El enunciado pide un script Vagrant que:
+Vagrant es una herramienta libre que, a partir de un fichero escrito en Ruby
+(el `Vagrantfile`), crea, configura y aprovisiona máquinas virtuales de forma
+reproducible [1][2][3]. Vagrant se abstrae del hipervisor que hay debajo
+(VirtualBox, VMware, Hyper-V…). Las VMs se crean a partir de una *box*: una
+imagen base empaquetada que se descarga una vez y se reutiliza. El mismo
+`Vagrantfile` sirve para replicar el mismo entorno en cualquier otro equipo.
+Como hipervisor se ha usado VirtualBox [4].
 
-- despliegue una VM Linux (distribución libre);
-- instale Node.js, descargue de GitHub el código del servidor y lo ejecute;
-- redirija puertos para que el servidor sea accesible **desde el exterior en
-  el 8080** y **desde la propia VM en el 3000**;
-- asigne a la VM una dirección de red acorde al tipo de conexión elegido.
+Instalación en Ubuntu, desde los repositorios oficiales de Oracle y de
+HashiCorp:
 
-Además, se valora explorar configuraciones adicionales, como varias
-interfaces en una misma VM. También se pide estudiar el consumo de memoria y
-CPU, estimar el de una réplica virtualizada del laboratorio y compararlo con
-servidores comerciales.
+```bash
+# VirtualBox
+wget -O- https://www.virtualbox.org/download/oracle_vbox_2016.asc \
+  | sudo gpg --dearmor --yes -o /usr/share/keyrings/oracle-virtualbox-2016.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] https://download.virtualbox.org/virtualbox/debian $(lsb_release -cs) contrib" \
+  | sudo tee /etc/apt/sources.list.d/virtualbox.list
+sudo apt update && sudo apt install -y virtualbox-7.2 build-essential dkms linux-headers-$(uname -r)
+sudo usermod -aG vboxusers $USER
 
-Requisitos propios añadidos: **teclado en español** y que, **al iniciar
-sesión, se imprima la configuración del servidor**.
+# Vagrant
+wget -O- https://apt.releases.hashicorp.com/gpg \
+  | sudo gpg --dearmor --yes -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
+  | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt update && sudo apt install -y vagrant
+```
 
-**Entregable:** `parte1-vagrant/Vagrantfile`.
+Se comprueba la instalación consultando las versiones:
 
-## 1.2. Configuración que proporciona el script
+```
+$ vagrant -v
+Vagrant 2.4.9
+$ VBoxManage --version
+7.2.20r175154
+```
 
-| Elemento | Configuración |
-|---|---|
-| Proveedor / box | VirtualBox, `bento/ubuntu-22.04` como clon enlazado (`linked_clone`) |
-| Recursos | 1 vCPU con tope del 80 % de una CPU del anfitrión y 1024 MB de RAM. Parametrizables con `VM_CPUS` y `VM_MEMORY` |
-| Nombre | `agr-nodeserver` (nombre de la VM y hostname) |
-| Red 1 – NAT | Salida a Internet y *port forwarding* `anfitrión:8080 → VM:3000` en todas las interfaces del anfitrión |
-| Red 2 – privada | host-only `192.168.56.10/24` (red del servicio) |
-| Red 3 – privada | host-only `192.168.57.10/24` (red de gestión) |
-| Red 4 – pública (opcional) | Bridge sobre una interfaz física con IP por DHCP: `BRIDGE_IF=<if> vagrant up` |
-| Sistema | Teclado español (consola y X11), locale `es_ES.UTF-8`, zona horaria `Europe/Madrid` |
-| Software | Node.js 22 (NodeSource). El código se clona de GitHub en `/opt/ssr-master-server` |
-| Servicio | Unidad systemd `ssr-server`: usuario sin privilegios `nodeapp` y reinicio automático |
-| Seguridad | Cortafuegos `ufw`: sólo 22/tcp y 3000/tcp |
-| Inicio de sesión | `/etc/profile.d/99-servidor-info.sh` imprime sistema, red, estado del servicio, URLs, puertos y cortafuegos |
-| Convivencia con KVM | Un *trigger* `before :up` descarga `kvm_amd`/`kvm_intel` y carga `vboxdrv`. VirtualBox y KVM no pueden usar VT-x/AMD-V a la vez |
+Antes de que VirtualBox funcionara hubo que resolver tres problemas del
+anfitrión:
 
-Esquema de red de la VM:
+| Problema | Causa | Solución |
+|---|---|---|
+| `No usable default provider` y VirtualBox 7.1 sin módulo del kernel | El kernel del anfitrión era demasiado nuevo para VirtualBox 7.1 | Actualizar a VirtualBox 7.2 |
+| `modprobe vboxdrv` rechazado | Secure Boot activo, con el módulo firmado con una clave no registrada | Desactivar Secure Boot en la BIOS (o registrar la clave MOK) y ejecutar `sudo /sbin/vboxconfig` |
+| `VERR_SVM_IN_USE` / `VERR_VMX_IN_VMX_ROOT_MODE` | KVM ocupa la virtualización del procesador (AMD-V/VT-x) | Descargar `kvm_amd` y `kvm` antes de `vagrant up`. El `Vagrantfile` lo hace solo (sección 2.3) |
+
+## 1.3. QEMU-KVM y libvirt (parte 2)
+
+KVM es el hipervisor integrado en el kernel de Linux. QEMU emula el resto del
+hardware de la VM y libvirt ofrece una interfaz común para definir y
+gestionar las VMs: ficheros XML de definición y la orden `virsh` [8][9]. Para
+preparar los discos sin arrancar las VMs se usan `qemu-img` [11] y
+`virt-customize` [12].
+
+Las dependencias del anfitrión las instala el propio script de la parte 2:
+
+```bash
+sudo ./despliegue.py instalar
+# = apt-get install qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients \
+#     libguestfs-tools isc-dhcp-client python3-lxml bridge-utils xterm traceroute \
+#     openssh-client curl
+```
+
+Como aconseja el enunciado, se parte de la **imagen de disco «maestro» y el
+fichero XML de Moodle**: Ubuntu 20.04 LTS con el superusuario `root` y la
+contraseña `agr`. La imagen se copia, sin modificarla, como
+`/var/lib/libvirt/images/lab3103/base.qcow2`. El XML se guarda como
+`parte2/plantilla.xml`.
+
+KVM y VirtualBox no pueden usar la virtualización del procesador a la vez:
+el `Vagrantfile` descarga KVM antes de arrancar y `despliegue.py` descarga
+VirtualBox antes de arrancar las VMs de la parte 2.
+
+# 2. Script de Vagrant en Ruby
+
+Se pide un script Vagrant (Ruby) que despliegue una máquina virtual Linux con
+un servidor web Node.js, en concreto **SSR-master-server** [5]. El script debe
+instalar Node.js, descargar el código de GitHub y ejecutarlo. El servidor debe
+ser accesible **en el puerto 3000 desde la propia VM** y **en el 8080 desde el
+exterior**, mediante redirección de puertos, y la VM debe tener una dirección
+de red acorde al tipo de conexión elegido. Se valora explorar configuraciones
+adicionales, como varias interfaces de red en la misma VM.
+
+A esto se han añadido dos requisitos propios: **teclado en español** e
+**imprimir la configuración del servidor al iniciar sesión**.
+
+## 2.1. Código: `parte1-vagrant/Vagrantfile`
+
+```{.ruby include="parte1-vagrant/Vagrantfile"}
+```
+
+## 2.2. Explicación del script
+
+El script se organiza en **parámetros**, cuatro **scripts de
+aprovisionamiento** en Bash y la **definición de la VM**. Estos son sus
+bloques funcionales:
+
+### 1. Virtualización y sistema base
+
+- **Box `bento/ubuntu-22.04`** (Ubuntu 22.04 LTS). Una versión LTS
+  garantiza soporte y compatibilidad con Node.js 22.
+- **1 vCPU y 1024 MB de RAM**, parametrizables con las variables de entorno
+  `VM_CPUS` y `VM_MEMORY`. Con `--cpuexecutioncap 80` la VM no puede usar más
+  del 80 % de una CPU del anfitrión. El estudio de consumo (sección 3) muestra
+  que estos recursos sobran.
+- **Clon enlazado** (`linked_clone`): la VM no copia la box, sólo guarda sus
+  diferencias. Ahorra disco y acelera la creación.
+- Nombre `agr-nodeserver`, como VM de VirtualBox y como hostname.
+
+### 2. Arquitectura de red avanzada (multihoming)
+
+La VM es un equipo *multi-homed* [3], con **cuatro interfaces de red**, como
+un servidor real que tiene una red de servicio, otra de gestión y salida a
+Internet:
+
+| Interfaz | Tipo | Dirección | Uso |
+|---|---|---|---|
+| eth0 (`enp0s3`) | NAT | 10.0.2.15 (DHCP de VirtualBox) | Salida a Internet para instalar paquetes. **Port forwarding `anfitrión:8080 → VM:3000`** en todas las interfaces del anfitrión, por lo que el servicio es accesible también desde otros equipos de la LAN |
+| eth1 | Privada (host-only) | 192.168.56.10/24 | Red del servicio web: `http://192.168.56.10:3000` |
+| eth2 | Privada (host-only) | 192.168.57.10/24 | Red de gestión |
+| eth3 (opcional) | Pública (bridge) | DHCP de la LAN | Sólo con `BRIDGE_IF=<interfaz> vagrant up` |
 
 ```
                     Internet
@@ -93,67 +175,150 @@ Esquema de red de la VM:
           (+ eth3 bridge opcional, IP por DHCP de la LAN)
 ```
 
-## 1.3. Estructura del Vagrantfile
+### 3. Aprovisionamiento idempotente
 
-El aprovisionamiento son cuatro *provisioners* de tipo `shell`, todos
-idempotentes: `vagrant provision` puede repetirse sin efectos indeseados.
+Cuatro *provisioners* de tipo `shell` automatizan la instalación. Son
+idempotentes: `vagrant provision` puede repetirse sin errores ni duplicidades.
 
 | Provisioner | Qué hace |
 |---|---|
-| `sistema` | Teclado `es` (`/etc/default/keyboard`, `setupcon`, `localectl`), locale, zona horaria, paquetes base y `ufw` |
-| `node` | Repositorio de NodeSource y Node.js 22, sólo si no estaba ya instalado |
-| `servidor` | Crea el usuario `nodeapp`, hace `git clone` (o `git pull` si ya existe) y `npm install --omit=dev`. Después crea, habilita y arranca la unidad `ssr-server.service` y espera a que el puerto 3000 responda |
-| `login-info` | Desactiva el MOTD de Ubuntu e instala el script que imprime la configuración al iniciar sesión |
+| `sistema` | **Teclado español** en consola y X11 (`/etc/default/keyboard`, `setupcon`, `localectl`, `loadkeys es`), locale `es_ES.UTF-8` y zona horaria `Europe/Madrid`. Instala los paquetes base y configura el cortafuegos `ufw`: deniega todo lo entrante salvo 22/tcp (SSH) y 3000/tcp (web) |
+| `node` | Instala Node.js 22 desde el repositorio oficial de NodeSource [6], sólo si no está ya instalada esa versión |
+| `servidor` | Crea el usuario sin privilegios `nodeapp`. Hace `git clone` del servidor en `/opt/ssr-master-server`, o `git pull` si ya existe. Ejecuta `npm install --omit=dev`. Crea y arranca el servicio systemd y espera a que el puerto 3000 responda |
+| `login-info` | Desactiva el MOTD de Ubuntu e instala `/etc/profile.d/99-servidor-info.sh` |
 
-Al terminar `vagrant up`, `post_up_message` muestra las tres URLs de acceso:
-`http://localhost:8080` desde el anfitrión, `http://192.168.56.10:3000` por la
-red privada y `http://localhost:3000` desde la VM.
+Todos los scripts empiezan con `set -euo pipefail`: si un paso falla, el
+aprovisionamiento se detiene en lugar de continuar con un sistema a medias.
 
-**Incidencia del servidor.** `app.js` ya ejecuta `app.listen(3000)`, y
+### 4. Gestión del servicio con systemd
+
+El servidor no se lanza con `nohup` sino como unidad **systemd**
+`ssr-server.service` [7]:
+
+- **Persistencia:** `systemctl enable` hace que arranque con la VM.
+- **Resiliencia:** `Restart=on-failure` lo vuelve a levantar si se detiene
+  por un error.
+- **Seguridad:** se ejecuta con el usuario `nodeapp`, sin privilegios.
+- **Operatividad:** se gestiona con `systemctl start|stop|status|restart
+  ssr-server` y `journalctl -u ssr-server`.
+
+**Incidencia del servidor:** `app.js` ya ejecuta `app.listen(3000)`, y
 `bin/www`, que es lo que lanza `npm start`, vuelve a escuchar en el mismo
-puerto. Por eso `npm start` termina con `EADDRINUSE`. El servicio lanza
+puerto. Por eso `npm start` termina con `EADDRINUSE`. El servicio ejecuta
 directamente `node app.js`.
 
-## 1.4. Uso
+### 5. Configuración del servidor al iniciar sesión
+
+`/etc/profile.d/99-servidor-info.sh` se ejecuta en cada inicio de sesión
+interactivo (`vagrant ssh`) e imprime:
+
+- **sistema:** hostname, SO, kernel, CPUs, memoria, disco, carga, teclado y
+  zona horaria;
+- **red:** IPs de cada interfaz, puerta de enlace y DNS;
+- **servidor web:** estado del servicio (ACTIVO o DETENIDO), ruta del código,
+  versiones de Node.js y npm, URLs de acceso desde la VM, la red privada y el
+  anfitrión, y puertos en escucha;
+- **cortafuegos:** reglas de `ufw`;
+- comandos útiles y un ejemplo de petición a `/record`.
+
+### 6. Preparación del anfitrión
+
+Un *trigger* `before [:up, :reload, :resume]` descarga los módulos de KVM si
+están cargados y carga `vboxdrv`. Así la VM arranca aunque se haya usado
+antes la parte 2. Si hay VMs de KVM encendidas, avisa de cómo apagarlas.
+
+## 2.3. Despliegue y comprobación
+
+Para lanzar la VM, desde la carpeta del `Vagrantfile`:
 
 ```bash
 cd parte1-vagrant
-vagrant up                     # crea y aprovisiona la VM
-vagrant ssh                    # entra; se imprime la configuración del servidor
-curl http://localhost:8080     # desde el anfitrión (port forwarding)
-vagrant halt | vagrant destroy -f
+vagrant up        # crea y aprovisiona la VM
+vagrant ssh       # entra en la VM: se imprime la configuración del servidor
 ```
 
-## 1.5. Pruebas realizadas
+Al terminar `vagrant up` se muestran las tres formas de acceder:
+
+```
+VM agr-nodeserver lista.
+  - Desde el anfitrión:   http://localhost:8080
+  - Por la red privada:   http://192.168.56.10:3000
+  - Dentro de la VM:      http://localhost:3000
+Entre con "vagrant ssh" para ver la configuración del servidor.
+```
+
+Pruebas realizadas:
 
 | Prueba | Orden | Resultado |
 |---|---|---|
 | Servicio desde la VM (puerto 3000) | `vagrant ssh -c "curl -s localhost:3000"` | HTML del Data-Logger |
-| Port forwarding (puerto 8080) | `curl http://localhost:8080` en el anfitrión | HTTP 200 |
+| Acceso exterior (puerto 8080) | `curl http://localhost:8080` en el anfitrión, o el navegador | HTTP 200, página del Data-Logger |
 | Red privada | `curl http://192.168.56.10:3000` | HTTP 200 |
-| Escritura de datos | `curl "localhost:8080/record?id_nodo=n1&temperatura=24.5&..."` | `Saving: ...` y un CSV nuevo en `/logs` |
+| Escritura de datos | `curl "localhost:8080/record?id_nodo=n1&temperatura=24.5&humedad=60&co2=300&volatiles=100"` | `Saving: ...` y un CSV nuevo en `/logs` |
 | Carga | 20 000 + 5000 peticiones a `/record` | 53 CSV generados, sin errores |
 | Información al iniciar sesión | `vagrant ssh` | Se imprime la configuración del servidor |
-| Teclado | Consola de VirtualBox (`VM_GUI=true`) | Distribución española |
+| Teclado | Consola de VirtualBox (`VM_GUI=true vagrant up`) | Distribución española |
 
-## 1.6. Estudio de consumo del servicio virtualizado
+# 3. Estudio del consumo de memoria y CPU
 
-Medidas tomadas sobre la VM `agr-nodeserver` desplegada con el `Vagrantfile`:
-Ubuntu 22.04, 1 vCPU, 1 GB de RAM, Node.js 22 y SSR-master-server. Los datos
-en bruto están en `doc/development/parte1/consumo_raw.txt`.
+Para valorar el coste del servicio virtualizado se midió en tiempo real,
+tanto en el anfitrión como dentro de la VM `agr-nodeserver`: Ubuntu 22.04,
+1 vCPU, 1 GB de RAM, Node.js 22 y SSR-master-server.
 
-**Metodología:** medidas desde el anfitrión (`ps`, `VBoxManage metrics`,
-`du`) y desde el invitado (`free`, `df`, `top`). Se midió en reposo y durante
-una carga de 5000 peticiones HTTP secuenciales a `/record` a través del port
-forwarding (`localhost:8080 → VM:3000`). Antes de esa carga ya se habían
-enviado unas 20 000 peticiones. El crecimiento de la imagen se vigiló con el
-comando que propone el enunciado:
+**Metodología:**
+
+- Desde el anfitrión: `ps` del proceso de la VM, `VBoxManage metrics` y
+  `du` de la carpeta de la VM.
+- Desde la VM: `free`, `df`, `top` y `ps` del proceso `node`.
+- Escenarios: en reposo y durante una carga de 5000 peticiones HTTP
+  secuenciales a `/record` a través del port forwarding
+  (`localhost:8080 → VM:3000`). Antes se habían enviado unas 20 000
+  peticiones.
+- Crecimiento de la imagen vigilado con `watch`, como propone el enunciado:
 
 ```bash
 watch "ls -al ~/VirtualBox\ VMs/agr-nodeserver/Snapshots/"
 ```
 
-### Memoria
+Los datos en bruto están en `doc/development/parte1/consumo_raw.txt`.
+Extracto literal, en reposo y con carga. Las líneas `VBoxHeadless` y
+`agr-nodeserver …` se tomaron en el anfitrión (`ps` y `VBoxManage metrics`);
+`Mem:`, `df`, `node` y `top`, dentro de la VM:
+
+```
+===== VM EN REPOSO =====
+    PID   RSS    VSZ %CPU %MEM     ELAPSED CMD
+  10423 1095328 3201216 3.4  3.4     56:19 /usr/lib/virtualbox/VBoxHeadless --comment agr-nodeserver ...
+agr-nodeserver  CPU/Load/User                            0.00%, 0.06%, 0.00%, 0.06%, 0.06%
+agr-nodeserver  CPU/Load/Kernel                          0.00%, 0.00%, 0.00%, 0.00%, 0.06%
+agr-nodeserver  RAM/Usage/Used                           1093860 kB (x5)
+agr-nodeserver  Guest/CPU/Load/User                      0.00% (x5)
+agr-nodeserver  Guest/CPU/Load/Kernel                    0.00% (x5)
+agr-nodeserver  Guest/RAM/Usage/Total                    980396 kB
+agr-nodeserver  Guest/RAM/Usage/Free                     719280 kB
+agr-nodeserver  Guest/RAM/Usage/Cache                    647532 kB
+ 21:18:06 up 58 min,  1 user,  load average: 0.04, 0.03, 0.01
+Mem:           957Mi       202Mi        69Mi       0.0Ki       685Mi       600Mi
+Swap:          2.9Gi       3.0Mi       2.9Gi
+/dev/mapper/ubuntu--vg-ubuntu--lv   31G  5.5G   24G  19% /
+820K	/opt/ssr-master-server/public/logs   (53 ficheros CSV)
+  RSS %CPU %MEM CMD
+86548  0.5  8.8 /usr/bin/node app.js
+
+===== VM CON CARGA (5000 peticiones) =====
+  10423 1097028 3201216 3.5  3.4
+agr-nodeserver  CPU/Load/User                            2.03%, 2.09%, 2.15%, 2.02%, 2.21%
+agr-nodeserver  CPU/Load/Kernel                          0.19%, 0.12%, 0.12%, 0.18%, 0.12%
+agr-nodeserver  RAM/Usage/Used                           1094116 kB .. 1095396 kB
+agr-nodeserver  Guest/CPU/Load/User                      5.00%, 19.00%, 17.00%, 15.00%, 17.00%
+agr-nodeserver  Guest/CPU/Load/Kernel                    4.00%, 9.00%, 7.00%, 8.00%, 7.00%
+top: %Cpu(s):  7.7 us, 15.4 sy, 76.9 id
+MiB Mem :    957.4 total,     71.1 free,    206.1 used,    680.3 buff/cache
+  19913 nodeapp   20   0 1265048  87860  54252 S  26.7   9.0   0:19.20 node
+Duracion carga: 40.883551254 s para 5000 peticiones
+```
+
+## 3.1. Memoria (RAM)
 
 | Medida | Reposo | Con carga | Tras carga |
 |---|---|---|---|
@@ -163,16 +328,16 @@ watch "ls -al ~/VirtualBox\ VMs/agr-nodeserver/Snapshots/"
 | RSS del proceso `node app.js` | 85 MiB | 86 MiB | — |
 
 - La aplicación es ligera: el sistema operativo y el servidor usan unos
-  **200 MiB**, y Node.js unos 85 MiB.
-- Sin embargo, **al anfitrión la VM le cuesta toda la RAM asignada (1 GB) más
-  unos 70 MiB de sobrecarga de VirtualBox.** El invitado usa la memoria libre
-  como caché de disco y VirtualBox no la devuelve. En virtualización completa
-  se paga la RAM *reservada*, no la *necesaria*.
+  **200 MiB** (un 20 % de la RAM asignada), y Node.js unos 85 MiB.
+- Sin embargo, **al anfitrión la VM le cuesta toda la RAM asignada (1 GB)
+  más unos 70 MiB de sobrecarga de VirtualBox**. El invitado usa la memoria
+  libre como caché de disco y VirtualBox no la devuelve. En virtualización
+  completa se paga la RAM *reservada*, no la *necesaria*.
 - La carga apenas mueve la memoria (+10 MiB): el servidor no acumula estado.
-- Podrían asignarse **512 MiB** sin pérdida de servicio, y el coste se
+- Se podría asignar **512 MiB** sin afectar al servicio, y el coste se
   reduciría a la mitad.
 
-### CPU
+## 3.2. CPU
 
 | Medida | Reposo | Con carga |
 |---|---|---|
@@ -180,15 +345,16 @@ watch "ls -al ~/VirtualBox\ VMs/agr-nodeserver/Snapshots/"
 | CPU del invitado (usuario + kernel) | 0 % | ~24 % de 1 vCPU |
 | `node` en `top` | 0.5 % | 26.7 % |
 
-- En reposo la VM prácticamente no consume CPU.
-- Con carga se sirvieron **5000 peticiones en 40.9 s (~122 pet/s, ~8 ms por
-  petición)**. El cuello de botella no es el servidor (vCPU al 24 %) sino el
-  cliente: un `curl` nuevo por petición, en serie. Con clientes concurrentes,
-  la VM admitiría bastante más tráfico antes de saturar su vCPU.
+- En reposo la sobrecarga de la virtualización es despreciable.
+- Con carga se sirvieron **5000 peticiones en 40.9 s (~122 peticiones/s,
+  ~8 ms por petición)**. El cuello de botella no es el servidor (vCPU al
+  24 %) sino el cliente: un `curl` nuevo por petición, en serie. Con
+  clientes concurrentes, la VM admitiría bastante más tráfico antes de
+  saturar su vCPU.
 - Aproximadamente un tercio del coste es del kernel, por la red virtual NAT y
   por la escritura en disco de cada petición.
 
-### Disco
+## 3.3. Disco y crecimiento de la imagen
 
 | Elemento | Tamaño |
 |---|---|
@@ -197,24 +363,24 @@ watch "ls -al ~/VirtualBox\ VMs/agr-nodeserver/Snapshots/"
 | Uso dentro del invitado | 5.5 GiB de 31 GiB virtuales |
 | Logs CSV tras ~25 000 registros | 1.2 MiB (53 ficheros) |
 
-- Gracias a `linked_clone`, la VM no copia la imagen base: sólo guarda las
-  diferencias (paquetes, Node.js, `node_modules` y logs). Una segunda VM
+- Con el clon enlazado, la box se guarda una sola vez y la VM sólo almacena
+  sus diferencias (paquetes, Node.js, `node_modules` y logs). Una segunda VM
   igual costaría otros 2 GiB aproximadamente, no 5.5.
 - El disco es *dinámico*: los 31 GiB son un máximo y el fichero crece al
-  escribirse bloques nuevos. Durante la carga de 5000 peticiones, el `.vmdk`
-  no cambió de forma visible con `watch` (siguió en 2.1 GiB).
-  - Los datos generados (unos 0.4 MiB, de 50 a 80 B por registro) son
-    despreciables frente a la granularidad de bloques del disco virtual.
-  - Al ritmo medido harían falta alrededor de un millón de registros para que
+  escribirse bloques nuevos. Durante la carga, `watch` mostró que el `.vmdk`
+  no cambiaba de forma visible (seguía en 2.1 GiB):
+  - los datos generados (unos 0.4 MiB, de 50 a 80 B por registro) son
+    despreciables frente a la granularidad de bloques del disco virtual;
+  - al ritmo medido harían falta alrededor de un millón de registros para que
     creciera entre 50 y 80 MiB.
 - Si los datos se borran dentro de la VM, el `.vmdk` **no** encoge. Habría
-  que compactarlo con `VBoxManage modifymedium --compact`.
+  que compactarlo (`VBoxManage modifymedium --compact`).
 
-### Estimación: réplica virtualizada del laboratorio 3103
+## 3.4. Consumo de una réplica virtualizada del laboratorio
 
-Según el plano (`doc/development/enunciado/plan_numeracion_3103.pdf`), el
-laboratorio tiene **4 routers** (RA–RD), **2 servidores** en 10.100.0.0/24,
-el PC del profesor y **4 redes de 8 PC** (32 PC). Hay dos escenarios:
+Según el plano del laboratorio (sección 4.1), éste tiene **4 routers**
+(RA–RD), **2 servidores** en 10.100.0.0/24, el PC del profesor y **4 redes de
+8 PC** (32 PC). Hay dos escenarios:
 
 - **Réplica completa:** 4 routers + 2 servidores + 32 PC = **38 VMs**. El PC
   del profesor es el propio anfitrión.
@@ -223,11 +389,10 @@ el PC del profesor y **4 redes de 8 PC** (32 PC). Hay dos escenarios:
 
 Coste por VM según las medidas:
 
-- **RAM:** unos 1.07 GiB en el anfitrión con 1 GB asignado (RAM asignada más
-  unos 70 MiB de sobrecarga).
+- **RAM:** unos 1.07 GiB en el anfitrión con 1 GB asignado.
 - **CPU:** un 0.06 % en reposo.
-- **Disco:** unos 2 GiB de disco diferencial, más los 811 MiB de la imagen
-  base compartida.
+- **Disco:** unos 2 GiB de disco diferencial, más los 811 MiB de la box
+  compartida.
 
 En la versión optimizada se asignan 256 MiB a routers y PC (unos 0.32 GiB
 reales) y 512 MiB a los servidores (unos 0.57 GiB).
@@ -239,23 +404,22 @@ reales) y 512 MiB a los servidores (unos 0.57 GiB).
 | Reducida, 1 GB por VM | 9 | ~9.6 GiB | ~19 GiB | < 1 % |
 | Reducida, optimizada | 9 | ~3.1 GiB | ~10 GiB | < 1 % |
 
-- La réplica completa sin optimizar **no cabe** en el anfitrión de prácticas
-  (30 GiB de RAM). Optimizada, ocupa un 42 % de la RAM. La reducida cabe de
-  sobra.
+- La réplica completa sin optimizar **no cabe** en el anfitrión (30 GiB de
+  RAM). Optimizada, ocupa un 42 % de la RAM. La reducida cabe de sobra.
 - **La RAM es el recurso limitante, no la CPU:** un router o un PC del
   laboratorio está ocioso casi siempre.
 - El disco de cada VM crece sólo con sus cambios. Con imágenes `qcow2` con
   *backing file* (el equivalente KVM de los clones enlazados), los routers y
-  PC, que apenas escriben, ocupan poco más que la imagen base compartida.
-  La parte 2 lo confirma: unos 140 MB por VM (ver la sección 2.7).
-- Con KVM, KSM (*Kernel Same-page Merging*) permite además que VMs con el
-  mismo sistema compartan páginas de memoria idénticas.
+  PC ocupan poco más que la imagen base. La parte 2 lo confirma: unos 140 MB
+  por VM y 6.1 GiB de RAM para las 9 VMs (sección 4.9).
+- Con KVM, además, KSM (*Kernel Same-page Merging*) permite que VMs con el
+  mismo sistema compartan páginas de memoria idénticas [18].
 
-### Comparación con servidores comerciales
+## 3.5. Comparación con servidores comerciales
 
-Un servidor de rack actual de 2 sockets (por ejemplo AMD EPYC 9005 o Intel
-Xeon 6) ofrece **hasta 384 núcleos / 768 hilos y de 1 a 6 TB de RAM**. Con
-las cifras medidas, en un servidor de 1 TB de RAM y 768 hilos:
+Un servidor de rack actual de 2 sockets, con AMD EPYC serie 9005 o Intel
+Xeon 6 [16][17], llega a **384 núcleos / 768 hilos y a varios TB de RAM**.
+Con las cifras medidas, en un servidor de 1 TB de RAM y 768 hilos:
 
 | Límite | Cálculo | VMs como ésta |
 |---|---|---|
@@ -263,131 +427,82 @@ las cifras medidas, en un servidor de 1 TB de RAM y 768 hilos:
 | CPU con carga como la del ensayo | 768 hilos / 0.37 hilos | ~2000 |
 | CPU en reposo | — | prácticamente ilimitado |
 
-- De nuevo manda la RAM. Ese servidor alojaría:
-  - de la réplica completa del laboratorio (38 VMs): **unas 22** sin optimizar
-    o **unas 70** con la configuración optimizada;
-  - de la réplica reducida (9 VMs): unas 95 y unas 300 respectivamente.
+- De nuevo manda la RAM. Ese servidor alojaría **unas 22 réplicas
+  completas** del laboratorio sin optimizar, o **unas 70** optimizadas. De
+  la réplica reducida, unas 95 y unas 300 respectivamente.
 - Frente al anfitrión de prácticas (16 hilos, 30 GiB), el servidor comercial
   tiene unas 48 veces más hilos y unas 33 veces más RAM.
-- Para un servicio tan ligero (85 MiB de Node.js), una VM completa
-  desperdicia memoria. Con **contenedores** (Docker o LXC), que comparten el
-  kernel del anfitrión, cada instancia costaría unos 100 MiB en lugar de
-  1 GiB: unas 10 veces más densidad. Las VMs compensan cuando se necesita
-  aislamiento fuerte o un kernel o sistema operativo distinto, por ejemplo
-  routers con su propia pila de red, como en la parte 2.
+- Para un servicio tan ligero, una VM completa desperdicia memoria. Con
+  **contenedores** (Docker o LXC), que comparten el kernel del anfitrión,
+  cada instancia costaría unos 100 MiB en lugar de 1 GiB: unas 10 veces más
+  densidad. Las VMs compensan cuando hace falta aislamiento fuerte o un
+  sistema propio, como los routers de la parte 2, que tienen su propia pila
+  de red.
 
-### Conclusiones del estudio
+## 3.6. Conclusiones del estudio
 
 1. El servidor Node.js necesita unos 200 MiB de RAM y muy poca CPU. La VM,
    en cambio, consume en el anfitrión toda la RAM asignada.
-2. El dimensionado importa: bajar a 512 MiB reduce el coste a la mitad sin
+2. Dimensionar bien importa: con 512 MiB el coste se reduce a la mitad sin
    afectar al servicio.
 3. Los clones enlazados y los discos dinámicos reducen mucho el disco
    ocupado. Los datos de la aplicación son despreciables.
 4. Para replicar redes completas, la RAM es el cuello de botella. La CPU sólo
    importa con carga real.
 
-## 1.7. Configuraciones adicionales a las mínimas
+# 4. Virtualización de infraestructura de red con KVM
 
-- **Cuatro interfaces de red** en la misma VM: NAT, dos host-only (servicio y
-  gestión) y bridge opcional.
-- Servicio **systemd** con usuario sin privilegios y reinicio automático, en
-  lugar de lanzar Node.js a mano.
-- **Cortafuegos** `ufw` con política de denegar por defecto.
-- **Teclado, locale y zona horaria** españoles.
-- **Información del servidor al iniciar sesión** (sistema, red, servicio,
-  URLs, puertos y cortafuegos).
-- Recursos **parametrizables** por variables de entorno y tope de CPU del
-  80 %.
-- *Trigger* que deja el anfitrión listo para VirtualBox aunque KVM (parte 2)
-  esté cargado.
+## 4.1. Red a desplegar
 
-## 1.8. Problemas encontrados en el anfitrión
+Se pide un script que despliegue con QEMU-KVM la red del laboratorio 3103:
 
-| Problema | Causa | Solución |
-|---|---|---|
-| `No usable default provider` | El módulo `vboxdrv` no estaba cargado | Ver las filas siguientes |
-| VirtualBox 7.1 no carga el módulo | El kernel era demasiado nuevo para la 7.1 | Actualizar a VirtualBox 7.2 |
-| `modprobe vboxdrv` rechazado | Secure Boot activo y módulo firmado con una clave no registrada | Desactivar Secure Boot (o registrar la clave MOK) |
-| `VERR_VMX_IN_VMX_ROOT_MODE` / `VERR_SVM_IN_USE` | KVM ocupa VT-x/AMD-V en los kernels recientes | Descargar `kvm_amd` y `kvm` antes de `vagrant up`; ahora lo hace el *trigger* del Vagrantfile |
+![Red del laboratorio 3103 (enunciado)](img/red_enunciado.png)
 
-# Parte 2 — Red del laboratorio 3103 con QEMU-KVM
+El script debe:
 
-## 2.1. Objetivo y entregables
+- generar los XML de las VMs, preferiblemente con `lxml`;
+- instalar la **Software Routing Suite** en los routers y configurar las
+  **rutas estáticas** para lograr conectividad global;
+- desplegar un **servicio web** en el servidor.
 
-El script debe cumplir lo siguiente:
+Cualquier máquina de las redes inferiores, y también el anfitrión, debe
+acceder al servicio web. Cada una de las cuatro subredes inferiores puede
+ser un único PC.
 
-- **Desplegar** con QEMU-KVM la red del laboratorio 3103, **generando los
-  XML** de las máquinas virtuales. Se recomienda usar `lxml`.
-- **Instalar la Software Routing Suite** en los routers y **configurar las
-  rutas estáticas** para lograr conectividad global.
-- **Desplegar un servicio web** en el servidor.
-- Que cualquier máquina de las redes inferiores y el anfitrión **accedan al
-  servicio web**.
+El plano del laboratorio publicado en Moodle da las direcciones, los puertos
+de los routers y sus tablas de enrutamiento:
 
-La memoria debe explicar el **plan de numeración (con dibujo)**, las
-**tablas de enrutamiento** de cada router y el **plan de pruebas** de
-conectividad global.
+![Plano del laboratorio 3103 (Moodle)](img/plan_numeracion_3103.png)
 
-**Entregables:**
-
-- `parte2/despliegue.py`, junto con los ficheros que usa: `plantilla.xml`,
-  `molde/` y `vm/`;
-- esta memoria.
-
-La red se construyó primero **a mano**, paso a paso. Así se entendió cada
-pieza y quedaron documentadas en `doc/entregables/guia_paso_a_paso.pdf` todas
-las órdenes y los errores encontrados. Después se **automatizó** con
-`despliegue.py`, que reproduce exactamente esa configuración.
-
-## 2.2. Decisiones de diseño
+## 4.2. Decisiones de diseño
 
 | Decisión | Motivo |
 |---|---|
-| **Imagen de disco y XML de Moodle** (Ubuntu 20.04, `root`/`agr`) como base | Lo aconseja el enunciado: KVM y libvirt son sensibles a la versión del sistema |
-| **Réplica reducida: 9 VMs** (RA, RB, RC, RD, SRV, PC1–PC4) | El enunciado permite que cada subred inferior sea un único PC |
-| **El anfitrión es el PC Profesor** (10.200.0.2/30, enlace con RA) | Es el equipo que el plano coloca en esa red. Además, las pruebas desde el anfitrión atraviesan toda la red, de RA hasta cada PC. Lo que el enunciado quiere comprobar con esa recomendación, el flujo de tráfico de las redes inferiores hacia el exterior, se comprueba desde PC1–PC4, que son VMs propias |
-| Cada red del plano es un **bridge Linux** del anfitrión | Hace de switch. Las tarjetas de las VMs son taps que libvirt conecta al bridge |
-| **FRR 7.2.1** como Software Routing Suite, con `staticd` y `vtysh` | Está en los repositorios de Ubuntu 20.04 y su sintaxis es la de Cisco IOS, como la del plano |
-| **Cadena de discos qcow2** `base ← molde ← VM` | La imagen de Moodle no se modifica nunca. El software común se instala una sola vez en el molde, y cada VM sólo guarda sus diferencias (unos 140 MB) |
-| Configuración de cada VM **escrita en su disco antes del primer arranque** (`virt-customize`) | Las VMs arrancan ya configuradas, sin intervención por consola |
-| Interfaces con nombres **`eth0`, `eth1`, `eth2`** en el orden del XML | La imagen arranca con `net.ifnames=0`, así que el orden de las `<interface>` del XML fija el nombre de cada tarjeta |
+| **Imagen de disco y XML de Moodle** como base (Ubuntu 20.04, `root`/`agr`) | Lo aconseja el enunciado: KVM y libvirt son sensibles a la versión del sistema |
+| **9 VMs:** RA, RB, RC, RD, SRV y un PC por red (PC1–PC4) | El enunciado permite que cada subred inferior sea un único PC |
+| **El plan de numeración es el del plano del laboratorio** | La réplica se comporta como la red real y las tablas de rutas son las del plano |
+| **El anfitrión es el PC Profesor** (10.200.0.2/30, enlace con RA) | Es el equipo que el plano coloca en esa red. Además, las pruebas desde el anfitrión atraviesan toda la red, de RA hasta cada PC. El flujo de tráfico de las redes inferiores hacia el exterior se comprueba desde PC1–PC4 |
+| Cada red es un **bridge Linux** del anfitrión | Hace de switch. Las tarjetas de las VMs son taps que libvirt conecta al bridge |
+| **FRR 7.2.1** como Software Routing Suite | Está en los repositorios de Ubuntu 20.04. Su `vtysh` usa la sintaxis de Cisco IOS, como el plano [13][14] |
+| **Cadena de discos qcow2** `base ← molde ← VM` | La imagen de Moodle no se modifica nunca. El software común se instala una sola vez en el molde, y cada VM sólo guarda sus diferencias |
+| Configuración de cada VM **escrita en su disco antes de arrancarla** (`virt-customize`) | Las VMs arrancan ya configuradas: no hay que entrar por consola a configurarlas |
+| Interfaces `eth0`, `eth1`, `eth2` en el orden del XML | La imagen arranca con `net.ifnames=0`, así que el orden de las `<interface>` del XML fija el nombre de cada tarjeta |
 
-## 2.3. Plan de numeración
+## 4.3. Plan de numeración
 
-### Dibujo de la red
+![Red desplegada: bridges, tarjetas e IPs de cada VM](img/topologia_lab3103.svg)
 
-![Topología del laboratorio 3103 construida con KVM: bridges, tarjetas e IPs](img/topologia_lab3103.svg)
-
-Esquema simplificado:
-
-```
-              [SRV] 10.100.0.11
-                |  br-srv 10.100.0.0/24
-              [RA] --- br-prof 10.200.0.0/30 --- [Anfitrión = PC Profesor] 10.200.0.2
-                |  br-ab 10.1.0.0/30
-              [RB]
-   br-bc       /    \       br-bd
- 10.2.0.0/30  /      \  10.3.0.0/30
-           [RC]      [RD]
-           /  \      /  \
-   br-red1  br-red2  br-red3  br-red4
-      |        |        |        |
-    [PC1]    [PC2]    [PC3]    [PC4]
-  10.0.1.10 10.0.2.10 10.0.3.10 10.0.4.10
-```
-
-El plan sigue el del laboratorio (`plan_numeracion_3103.pdf`):
+El plan sigue el del laboratorio:
 
 - **10.100.0.0/24** para la red de servidores;
 - **/30** para los enlaces punto a punto entre routers (10.1, 10.2 y 10.3) y
   para el del PC Profesor (10.200.0.0/30);
 - **10.0.N.0/24** para cada red de PC.
 
-En cada red, el router tiene la **.1** y el equipo final la **.10** (el
-servidor, la **.11**).
+En cada red, el router tiene la **.1**, el PC la **.10** y el servidor la
+**.11**, que es la dirección de las VMs de SRV1 en el plano.
 
-### Redes (bridges del anfitrión)
+**Redes (bridges del anfitrión):**
 
 | Bridge | Red del plano | Subred | Equipos conectados |
 |---|---|---|---|
@@ -401,7 +516,7 @@ servidor, la **.11**).
 | `br-red3` | RED 3 (SW3) | 10.0.3.0/24 | RD (eth1), PC3 (eth0) |
 | `br-red4` | RED 4 (SW4) | 10.0.4.0/24 | RD (eth2), PC4 (eth0) |
 
-### Direcciones de cada equipo
+**Direcciones de cada equipo:**
 
 | Equipo | Tarjeta | Puerto del plano | Bridge | IP | Puerta de enlace |
 |---|---|---|---|---|---|
@@ -424,17 +539,12 @@ servidor, la **.11**).
 | **PC4** | eth0 | — | br-red4 | 10.0.4.10/24 | 10.0.4.1 (RD) |
 | **Anfitrión** | br-prof | — | br-prof | 10.200.0.2/30 | Rutas a las 8 redes del laboratorio vía 10.200.0.1 (RA) |
 
-Las IPs están en `/etc/network/interfaces` de cada VM (fichero
-`parte2/vm/<vm>/interfaces`). En los routers está activo además el reenvío IP
-(`net.ipv4.ip_forward=1` en `/etc/sysctl.d/99-router.conf`).
+## 4.4. Tablas de enrutamiento
 
-## 2.4. Tablas de enrutamiento
-
-Diseño: los routers de los extremos (RA, RC y RD) sólo necesitan una **ruta
-por defecto** hacia RB. RB es el único que conoce el detalle: las redes de PC
-de cada rama y la ruta por defecto hacia RA, que lleva a la red de
-servidores y al PC Profesor. Son sólo **8 rutas estáticas** para
-toda la red.
+Los routers de los extremos (RA, RC y RD) sólo necesitan una **ruta por
+defecto** hacia RB. RB es el único que conoce el detalle: las redes de PC de
+cada rama y la ruta por defecto hacia RA, que lleva a la red de servidores
+y al PC Profesor. En total son **8 rutas estáticas**, las del plano:
 
 | Router | Destino | Siguiente salto | Interfaz | Motivo |
 |---|---|---|---|---|
@@ -447,26 +557,11 @@ toda la red.
 | **RC** | 0.0.0.0/0 | 10.2.0.1 (RB) | eth0 | Única salida |
 | **RD** | 0.0.0.0/0 | 10.3.0.1 (RB) | eth0 | Única salida |
 
-Se configuraron en `vtysh` (por ejemplo `ip route 10.0.1.0/24 10.2.0.2`) y se
-guardaron con `write memory` en `/etc/frr/frr.conf`. El script instala esos
-mismos ficheros (`parte2/vm/<router>/frr.conf`). Ejemplo, el de RB:
-
-```
-frr defaults traditional
-hostname RB
-service integrated-vtysh-config
-!
-ip route 0.0.0.0/0 10.1.0.1
-ip route 10.0.1.0/24 10.2.0.2
-ip route 10.0.2.0/24 10.2.0.2
-ip route 10.0.3.0/24 10.3.0.2
-ip route 10.0.4.0/24 10.3.0.2
-!
-line vty
-```
-
-Tablas obtenidas con `vtysh -c 'show ip route'` en la red desplegada por el
-script (prueba 4 del plan; `S` = estática, `C` = directamente conectada):
+Las rutas se configuran en FRR con `ip route <destino> <siguiente salto>` y se
+guardan en `/etc/frr/frr.conf` (ver la sección 4.5.6). Las tablas que muestra
+FRR (`vtysh -c 'show ip route'`) en la red desplegada por el script son las
+siguientes. `S` indica una ruta estática, `C` una red directamente
+conectada, y `*` que la ruta está instalada en el kernel:
 
 **RA**
 
@@ -508,193 +603,317 @@ C>* 10.0.4.0/24 is directly connected, eth2
 C>* 10.3.0.0/30 is directly connected, eth0
 ```
 
-Las tablas coinciden con las del plano. RA tiene además directamente
-conectada la red 10.1.0.0/30, que la tabla del plano no lista. El `*` indica
-que FRR ha instalado la ruta en el kernel. Se comprobó con `ip route`, donde
-aparecen como `proto static`; ver las capturas de la sección 2.6.4.
+Coinciden con las tablas del plano. RA tiene además directamente conectada la
+red 10.1.0.0/30, que la tabla del plano no lista.
 
-## 2.5. El script de despliegue: `despliegue.py`
+## 4.5. Script de despliegue: `parte2/despliegue.py`
 
-### Ficheros
+El script está escrito en **Python 3** y usa **lxml** para los XML, como
+recomienda el enunciado. Se apoya en estos ficheros del repositorio:
 
 ```
 parte2/
-├── despliegue.py            Script de despliegue (Python 3 + lxml)
+├── despliegue.py            script de despliegue
 ├── plantilla.xml            XML de Moodle: base de los XML de todas las VMs
 ├── molde/
-│   ├── preparar_molde.sh    Software común: FRR, Node.js, servidor web, SSH
-│   └── ssr-server.service   Servicio systemd del servidor web
-├── vm/<vm>/                 Configuración de dentro de cada VM
-│   ├── interfaces           → /etc/network/interfaces
-│   ├── 99-router.conf       → /etc/sysctl.d/   (routers: reenvío IP)
-│   └── frr.conf             → /etc/frr/frr.conf (routers: rutas estáticas)
-├── red.sh                   Versión manual: prepara el anfitrión
-└── xml/                     XML de la versión manual (referencia)
+│   ├── preparar_molde.sh    software común: FRR, Node.js, servidor web, SSH
+│   └── ssr-server.service   servicio systemd del servidor web
+└── vm/<vm>/                 configuración de dentro de cada VM
+    ├── interfaces           → /etc/network/interfaces
+    ├── 99-router.conf       → /etc/sysctl.d/     (routers: reenvío IP)
+    └── frr.conf             → /etc/frr/frr.conf  (routers: rutas estáticas)
 ```
 
-El plan de numeración está declarado **una sola vez**, al principio del
-script, en dos diccionarios: `REDES` (bridge → subred) y `VMS` (VM → rol,
-bridges e IPs). Todo lo demás se deriva de ellos: bridges, XML, rutas del
-anfitrión, lista de IPs que se prueban y salida de `estado`.
-
-```python
-VMS = {
-    "srv": ("server", ["br-srv"], ["10.100.0.11"]),
-    "ra":  ("router", ["br-srv", "br-ab", "br-prof"], ["10.100.0.1", "10.1.0.1", "10.200.0.1"]),
-    "rb":  ("router", ["br-ab", "br-bc", "br-bd"],    ["10.1.0.2", "10.2.0.1", "10.3.0.1"]),
-    ...
-    "pc4": ("pc", ["br-red4"], ["10.0.4.10"]),
-}
-```
-
-### Órdenes
+Se usa con una orden por acción:
 
 | Orden | Qué hace |
 |---|---|
-| `sudo ./despliegue.py instalar` | Instala las dependencias del anfitrión: QEMU, libvirt, libguestfs, lxml, xterm, traceroute… |
+| `sudo ./despliegue.py instalar` | Instala las dependencias del anfitrión |
 | `sudo ./despliegue.py molde` | Construye `molde.qcow2` sobre la imagen de Moodle con el software común |
 | `sudo ./despliegue.py crear` | Prepara el anfitrión, crea discos y XML, ejecuta `virsh define` y `virsh start` y espera a que las VMs estén listas |
 | `sudo ./despliegue.py probar [--informe f]` | Ejecuta el plan de pruebas de conectividad global |
 | `sudo ./despliegue.py estado` | Estado y tarjetas de cada VM |
-| `sudo ./despliegue.py consola ra rb …` | Abre un `xterm` con `virsh console` de cada VM, en segundo plano |
-| `sudo ./despliegue.py parar` / `arrancar` | `virsh shutdown` / `virsh start` de todas las VMs (o de las indicadas) |
+| `sudo ./despliegue.py consola ra rb …` | Abre un `xterm` con la consola de cada VM, en segundo plano |
+| `sudo ./despliegue.py parar` / `arrancar` | `virsh shutdown` / `virsh start` |
 | `sudo ./despliegue.py destruir` | `virsh destroy` y `undefine`. Borra los discos de las VMs, los bridges y las rutas, y conserva la imagen base y el molde |
-| `./despliegue.py xml` | Sólo genera los XML en `xml/`. No necesita root |
+| `./despliegue.py xml` | Sólo genera los XML en `parte2/xml/`. No necesita root |
 
-Opciones: `-v` (trazas de depuración) y `--ram MB` (RAM por VM; por defecto,
-la de la plantilla). Con `--proxy`, el molde descarga los paquetes a través
-de un proxy.
+Opciones: `-v` activa las trazas de depuración, `--ram MB` fija la RAM de
+cada VM (por defecto, la de la plantilla) y `--proxy` sirve para construir el
+molde detrás de un proxy.
 
-### Flujo de `crear`
+### 4.5.1. Código
 
-![Cómo se construye cada elemento de la red](img/construccion_lab3103.svg)
-
-1. **Molde** (sólo si no existe; también con la orden `molde`):
-   - `qemu-img create -b base.qcow2` crea un disco diferencial sobre la imagen
-     de Moodle;
-   - `virt-customize --network` ejecuta dentro de ese disco
-     `molde/preparar_molde.sh`. El script instala FRR (deshabilitado),
-     traceroute, tcpdump, curl, git y `openssh-server`, además de Node.js 22,
-     y clona SSR-master-server con su `npm install`. También deja el servicio
-     `ssr-server` creado pero sin activar y limpia la configuración de red.
-2. **Anfitrión** (`preparar_anfitrion`):
-   - descarga VirtualBox si está cargado y carga `kvm_amd`/`kvm_intel`;
-   - arranca `libvirtd`;
-   - crea los 9 bridges y pone a 0 `bridge-nf-call-iptables`, para que el
-     cortafuegos de Docker no filtre el tráfico entre VMs;
-   - da al anfitrión la IP 10.200.0.2/30 en `br-prof` y rutas a las 8 redes
-     del laboratorio vía RA.
-3. **Para cada VM**:
-   - **Disco** (`crear_disco`): `qemu-img create -b molde.qcow2` y después
-     `virt-customize` escribe en el disco el hostname, `/etc/network/interfaces`,
-     la clave SSH del anfitrión (para las pruebas) y las claves de host SSH
-     propias de la VM.
-     - En los routers escribe además `99-router.conf`, `frr.conf` y la
-       configuración de `watchfrr`, y habilita `frr`.
-     - En el servidor habilita `ssr-server`.
-   - **XML** (`generar_xml`, con **lxml**): ver más abajo.
-   - `virsh define` y `virsh start`. Antes se hace `destroy` y `undefine` para
-     que se pueda volver a ejecutar sin errores.
-4. **Espera** (`esperar`): una VM está *lista* cuando responde al ping. Un
-   router, además, cuando FRR ya ha instalado su ruta por defecto (comprobado
-   por SSH). El servidor, cuando responde por HTTP.
-5. Muestra el estado de las 9 VMs.
-
-### Generación de los XML con lxml
-
-El enunciado recomienda `lxml.etree`. El script parte de `plantilla.xml` (el
-XML de Moodle) y cambia sólo lo necesario. Son los mismos cambios que se
-hicieron a mano en la guía:
-
-```python
-arbol = etree.parse(str(AQUI / "plantilla.xml"), etree.XMLParser(remove_blank_text=True))
-raiz = arbol.getroot()
-raiz.find("name").text = vm                               # 1. nombre
-raiz.find("devices/disk/source").set("file", str(disco))  # 2. disco
-# 3. una <interface> por bridge, en orden: eth0, eth1, eth2
-devices = raiz.find("devices")
-original = devices.find("interface")
-pos = list(devices).index(original)
-devices.remove(original)
-for i, br in enumerate(VMS[vm][1]):
-    itf = etree.Element("interface", type="bridge")
-    etree.SubElement(itf, "source", bridge=br)
-    etree.SubElement(itf, "model", type="virtio")
-    devices.insert(pos + i, itf)
+```{.python include="parte2/despliegue.py"}
 ```
 
-Resultado para RA (fragmento):
+### 4.5.2. Configuración: el plan de numeración en el script
+
+El plan de numeración se declara **una sola vez**, al principio, en dos
+diccionarios:
+
+- `REDES`: cada bridge con su subred;
+- `VMS`: cada VM con su rol (`router`, `server` o `pc`), la lista de bridges
+  de sus tarjetas (en orden: eth0, eth1, eth2) y sus IPs.
+
+Todo lo demás se deriva de ellos: los bridges, los XML, las rutas del
+anfitrión, la lista de IPs que se prueban (`TODAS_LAS_IPS`, 18 en total) y la
+salida de `estado`. Para cambiar la topología basta con editar estos dos
+diccionarios y los ficheros de `vm/`.
+
+### 4.5.3. Preparación del anfitrión (`preparar_anfitrion`)
+
+1. Si VirtualBox está cargado, descarga sus módulos. Después carga
+   `kvm_amd` o `kvm_intel`, según el procesador. Si no hay `/dev/kvm`, avisa
+   de que se usará emulación software.
+2. Arranca `libvirtd`.
+3. Crea los 9 bridges (`ip link add <br> type bridge`) y los levanta.
+4. Pone a 0 `bridge-nf-call-iptables`, para que el cortafuegos del anfitrión
+   (por ejemplo, el de Docker) no filtre el tráfico entre VMs.
+5. Da al anfitrión la IP del PC Profesor (10.200.0.2/30 en `br-prof`) y una
+   ruta a cada red del laboratorio vía RA (10.200.0.1).
+
+### 4.5.4. Generación de los XML con lxml (`generar_xml`)
+
+El enunciado recomienda `lxml.etree` [10]. La función parte de
+`plantilla.xml`, el XML de Moodle, y cambia sólo lo necesario:
+
+1. `<name>`: el nombre de la VM;
+2. `<disk><source file=…>`: su disco;
+3. `<memory>` y `<currentMemory>`, si se pide otra RAM con `--ram`;
+4. la `<interface>` de la plantilla se sustituye por **una por cada bridge**,
+   en orden, para que dentro de la VM sean eth0, eth1 y eth2.
+
+Si el anfitrión no tiene KVM, el tipo de dominio pasa de `kvm` a `qemu`
+(emulación). Resultado para RA (fragmento de `parte2/xml/ra.xml`):
 
 ```xml
 <domain type="kvm">
   <name>ra</name>
+  <memory>1048576</memory>
   ...
-  <disk type="file" device="disk">
-    <source file="/var/lib/libvirt/images/lab3103/ra.qcow2"/>
-  ...
-  <interface type="bridge"><source bridge="br-srv"/><model type="virtio"/></interface>
-  <interface type="bridge"><source bridge="br-ab"/><model type="virtio"/></interface>
-  <interface type="bridge"><source bridge="br-prof"/><model type="virtio"/></interface>
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2"/>
+      <source file="/var/lib/libvirt/images/lab3103/ra.qcow2"/>
+      <target dev="vda" bus="virtio"/>
+    </disk>
+    <interface type="bridge">
+      <source bridge="br-srv"/>
+      <model type="virtio"/>
+    </interface>
+    <interface type="bridge">
+      <source bridge="br-ab"/>
+      <model type="virtio"/>
+    </interface>
+    <interface type="bridge">
+      <source bridge="br-prof"/>
+      <model type="virtio"/>
+    </interface>
 ```
 
-### Mensajes: `print` y `logging`
+### 4.5.5. El molde: software común (`cmd_molde`)
 
-Se sigue la recomendación del enunciado:
+Todas las VMs necesitan el mismo software. Para no instalarlo nueve veces, se
+crea un **molde**:
+
+1. `qemu-img create -b base.qcow2 molde.tmp` crea un disco diferencial sobre
+   la imagen de Moodle, que no se modifica.
+2. `virt-customize --network` ejecuta dentro de ese disco
+   `molde/preparar_molde.sh`, con acceso a Internet y sin arrancar la VM.
+3. El disco se renombra como `molde.qcow2` y se deja en sólo lectura.
+
+```{.bash include="parte2/molde/preparar_molde.sh"}
+```
+
+El script instala:
+
+- **FRR**, la Software Routing Suite, deshabilitada: sólo se activará en los
+  routers;
+- herramientas de diagnóstico y `openssh-server`;
+- **Node.js 22**: desde NodeSource o, si no está accesible, con los binarios
+  oficiales de nodejs.org;
+- el **servidor web** SSR-master-server, igual que en la parte 1, con un
+  usuario sin privilegios y su servicio systemd creado pero sin activar.
+
+Por último deja la configuración de red vacía, porque cada VM recibe la suya
+al crearla.
+
+```{.ini include="parte2/molde/ssr-server.service"}
+```
+
+### 4.5.6. Disco y configuración de cada VM (`crear_disco`)
+
+Cada VM tiene su propio disco diferencial sobre el molde
+(`qemu-img create -b molde.qcow2 <vm>.qcow2`, unos 140 MB). Antes de
+arrancarla, `virt-customize` escribe en él su configuración:
+
+| Qué | Cómo | VMs |
+|---|---|---|
+| Hostname | `--hostname <vm>` | Todas |
+| Direcciones IP | `vm/<vm>/interfaces` → `/etc/network/interfaces` | Todas |
+| Acceso SSH del anfitrión (para las pruebas) | `--ssh-inject` con la clave `clave_lab` | Todas |
+| Claves de host SSH propias | `ssh-keygen -A` | Todas |
+| Reenvío IP | `vm/<router>/99-router.conf` → `/etc/sysctl.d/` | Routers |
+| Rutas estáticas | `vm/<router>/frr.conf` → `/etc/frr/frr.conf` y `systemctl enable frr` | Routers |
+| Robustez de FRR | *Drop-in* de systemd que vuelve a aplicar `frr.conf` al arrancar, y tiempos de `watchfrr` más tolerantes | Routers |
+| Servidor web | `systemctl enable ssr-server` | SRV |
+
+Ficheros de RA:
+
+```{.ini include="parte2/vm/ra/interfaces"}
+```
+
+```{.ini include="parte2/vm/ra/99-router.conf"}
+```
+
+Y el `frr.conf` de RB, el router con más rutas. Es la configuración que se
+introdujo en `vtysh` y se guardó con `write memory` en la construcción
+manual:
+
+```{.ini include="parte2/vm/rb/frr.conf"}
+```
+
+Un PC sólo necesita su IP y su puerta de enlace:
+
+```{.ini include="parte2/vm/pc1/interfaces"}
+```
+
+### 4.5.7. Gestión de las VMs: `virsh` y `xterm`
+
+Se siguen las recomendaciones del enunciado:
+
+- Todas las operaciones usan `virsh` sobre `qemu:///system`: `define`,
+  `start`, `shutdown`, `destroy`, `undefine` y `domstate`. Antes de
+  `define` se hace `destroy` y `undefine`, para que `crear` pueda repetirse
+  sin el error *domain already exists*.
+- La orden `consola` abre una terminal por VM con
+  `xterm -e "virsh console <vm>"`, en segundo plano (`subprocess.Popen` con
+  `start_new_session`), así que el script no se queda detenido.
+
+### 4.5.8. Mensajes: `print` y `logging`
 
 - **`print`** (función `info`, con el prefijo `>>>`) para lo que el programa
-  muestra siempre: fases del despliegue, VMs creadas y resultados;
-- **`logging`** para las trazas:
-  - nivel INFO: bridges creados, VMs listas;
-  - nivel DEBUG, sólo con `-v`: cada orden ejecutada, con su línea `$ …`.
+  muestra siempre: fases del despliegue, VMs creadas y resultados.
+- **`logging`** [15] para las trazas:
+  - nivel INFO para el progreso: bridges creados, VMs listas;
+  - nivel DEBUG, sólo con `-v`, para cada orden ejecutada (línea `$ …`).
 
-Las trazas se eliminan sin tocar el código, simplemente quitando `-v`.
+Las trazas de depuración se eliminan sin tocar el código: basta con quitar
+`-v`.
 
-### Gestión de las VMs
+### 4.5.9. Espera al arranque y pruebas (`esperar`, `cmd_probar`)
 
-Todas las operaciones usan `virsh` sobre `qemu:///system`, como recomienda el
-enunciado: `define`, `start`, `shutdown`, `destroy`, `undefine` y `domstate`.
-La orden `consola` abre las terminales con
-`xterm -e "virsh console <vm>"` en segundo plano (`subprocess.Popen` con
-`start_new_session`), así que el script no se queda detenido.
+`crear` no termina hasta que la red funciona. Una VM está *lista* cuando:
 
-### Uso desde cero
+- responde al ping;
+- si es un router, FRR ya ha instalado su ruta por defecto (comprobado por
+  SSH);
+- si es el servidor, responde por HTTP en el puerto 3000.
+
+La orden `probar` ejecuta el plan de pruebas de la sección 4.8.
+
+## 4.6. Despliegue paso a paso
+
+Desde cero, con la imagen de Moodle copiada como `base.qcow2`:
 
 ```bash
 git clone -b claude/peaceful-lovelace-6f6vcz https://github.com/PabloElviraCalatayud/AGR.git
 cd AGR/parte2
-sudo cp <imagen de Moodle>.qcow2 /var/lib/libvirt/images/lab3103/base.qcow2
-sudo ./despliegue.py instalar
-sudo ./despliegue.py molde        # ~10 min, necesita Internet
-sudo ./despliegue.py crear
-sudo ./despliegue.py probar --informe /tmp/pruebas.txt
+sudo ./despliegue.py instalar      # dependencias del anfitrión (una vez)
+sudo ./despliegue.py molde         # software común (una vez, ~10 min, con Internet)
+sudo ./despliegue.py crear         # red completa
 ```
 
-Salida de `crear` en el anfitrión de pruebas:
+Salida de `crear`. Se crean los 9 bridges y las 9 VMs, cada una con sus
+tarjetas e IPs. El script espera a que todas estén listas y muestra el
+estado final, con las 9 en `running`:
 
-![Salida de `sudo ./despliegue.py crear`: bridges, VMs con sus tarjetas, espera y estado final](development/parte2/capturas/despliegue_crear.png)
+![`sudo ./despliegue.py crear`](development/parte2/capturas/despliegue_crear.png)
 
-## 2.6. Plan de pruebas
+Para entrar en una VM:
 
-### 2.6.1. Objetivo y diseño
+```bash
+sudo ./despliegue.py consola ra    # xterm con la consola; usuario root, contraseña agr
+```
 
-El objetivo es demostrar la **conectividad global**: que **cualquier equipo
-llega a cualquier otro**, que **todos acceden al servicio web** y que el
-tráfico sigue el **camino previsto** por las tablas de enrutamiento. Las
-pruebas se hicieron en dos momentos:
+## 4.7. Comprobación en cada máquina
 
-1. **Durante la construcción manual**, paso a paso: cada elemento nuevo se
-   probaba antes de seguir. Ver la tabla de la sección 2.6.5.
-2. **Al final**, de forma automática con `despliegue.py probar`, en cuatro
-   bloques:
+Antes de automatizar, la red se construyó y verificó a mano, VM a VM, con la
+misma configuración que aplica el script. En la consola de cada VM se
+mostraron:
 
-| Bloque | Desde | Qué se comprueba | Nº de pruebas |
-|---|---|---|---|
-| 1 | Anfitrión (PC Profesor) | Ping a las 17 IPs de las VMs; `GET /` del servidor web (HTTP 200) y `GET /record` (escritura de datos) | 19 |
-| 2 | Anfitrión | `traceroute` a cada PC: el último salto debe ser el PC y el camino el previsto | 4 |
-| 3 | Cada una de las 9 VMs (por SSH) | Ping a las **18 IPs** de la red (todas las tarjetas, más el anfitrión) y `GET /` del servidor web | 9 (162 pings + 9 HTTP) |
-| 4 | Cada router (por SSH) | `show ip route` de FRR: rutas estáticas instaladas (`S>*`) | 4 |
+- sus interfaces (`ip -br a`) y su tabla del kernel (`ip route`);
+- en los routers, la tabla de FRR (`show ip route`);
+- en el servidor, el puerto 3000 en escucha.
 
-Orden ejecutada en cada VM en el bloque 3:
+Después se lanzó la prueba de conectividad global: ping a las 18 IPs de la
+red y petición HTTP al servidor. Resultado en las 9 VMs: **18/18, web=200,
+fallan: ninguna** (10/11/2026; transcripción en
+`doc/development/parte2/verificacion_final.txt`).
+
+**Routers.** Las rutas estáticas aparecen en la tabla del kernel como
+`proto static`, lo que confirma que FRR las ha instalado.
+
+![RA](development/parte2/capturas/verificacion_ra.webp)
+
+![RB](development/parte2/capturas/verificacion_rb.webp)
+
+![RC](development/parte2/capturas/verificacion_rc.webp)
+
+![RD](development/parte2/capturas/verificacion_rd.webp)
+
+**Servidor web.** Node.js escucha en `*:3000`.
+
+![SRV](development/parte2/capturas/verificacion_srv.webp)
+
+**PCs.** Cada uno tiene su IP y su ruta por defecto hacia su router.
+
+![PC1](development/parte2/capturas/verificacion_pc1.webp)
+
+![PC2](development/parte2/capturas/verificacion_pc2.webp)
+
+![PC3](development/parte2/capturas/verificacion_pc3.webp)
+
+![PC4](development/parte2/capturas/verificacion_pc4.webp)
+
+## 4.8. Plan de pruebas
+
+### 4.8.1. Objetivo y diseño
+
+El objetivo es demostrar la **conectividad global**:
+
+- que **cualquier equipo llega a cualquier otro**;
+- que **todos acceden al servicio web**;
+- que el tráfico sigue el **camino previsto** por las tablas de
+  enrutamiento.
+
+Se probó en dos momentos:
+
+1. **Durante la construcción**, paso a paso: cada elemento nuevo se probaba
+   antes de seguir.
+
+   | Paso | Prueba | Resultado |
+   |---|---|---|
+   | Red de servidores | RA ↔ SRV (ping) | ✅ |
+   | Enlace RA–RB | RB → RA. RB → SRV antes de configurar rutas | ✅ / ❌ *Network is unreachable* (esperado) |
+   | Rutas en RA y RB | RB → SRV (ping; traceroute `10.1.0.1` → `10.100.0.11`) | ✅ |
+   | Rama de RC | RC → SRV (traceroute `10.2.0.1` → `10.1.0.1` → `10.100.0.11`) | ✅ tras corregir la ruta perdida en RB (sección 4.11) |
+   | PC1 y PC2 | PC2 → RC, PC1 y SRV (traceroute de 4 saltos) | ✅ |
+   | Rama de RD | PC3 → RD y SRV. PC4 → RD, PC3, PC1 y SRV | ✅ |
+   | PC Profesor | Anfitrión → RA, SRV y PC1; traceroute a PC4 | ✅ |
+   | Servidor web | `curl` y `/record` desde PC1, PC4 y el anfitrión; CSV creados en SRV | ✅ |
+
+2. **Al final**, de forma automática con `sudo ./despliegue.py probar`, en
+   cuatro bloques:
+
+   | Bloque | Desde | Qué se comprueba | Pruebas |
+   |---|---|---|---|
+   | 1 | Anfitrión (PC Profesor) | Ping a las 17 IPs de las VMs. `GET /` del servidor web (HTTP 200) y `GET /record` (escritura de datos) | 19 |
+   | 2 | Anfitrión | `traceroute` a cada PC: el último salto es el PC y el camino es el previsto | 4 |
+   | 3 | Cada una de las 9 VMs (por SSH) | Ping a las **18 IPs** de la red (todas las tarjetas, más el anfitrión) y `GET /` del servidor web | 9 (162 pings + 9 HTTP) |
+   | 4 | Cada router (por SSH) | `show ip route` de FRR con las rutas estáticas instaladas (`S>*`) | 4 |
+
+Orden que se ejecuta en cada VM en el bloque 3:
 
 ```bash
 ok=0; fail=''
@@ -707,22 +926,24 @@ web=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://10.100.0.11:300
 echo "$ok $web$fail"
 ```
 
-### 2.6.2. Resultado: 36/36 pruebas correctas
+### 4.8.2. Resultado: 36/36 pruebas correctas
 
-Despliegue desde cero (`git clone`, `molde`, `crear`, `probar`) en el
-anfitrión de pruebas, el 23/11/2026:
+Red desplegada desde cero con el script, el 23/11/2026:
 
-![Salida de `sudo ./despliegue.py probar`: 36/36 pruebas correctas](development/parte2/capturas/despliegue_probar.png)
+![`sudo ./despliegue.py probar --informe /tmp/pruebas.txt`](development/parte2/capturas/despliegue_probar.png)
 
-![Estado, traceroute a PC4, acceso web desde el anfitrión e informe completo con los traceroute y las tablas de los routers](development/parte2/capturas/despliegue_estado_informe.png)
+Estado de las VMs, traceroute a PC4, acceso web desde el anfitrión e informe
+completo, con los traceroute a cada PC y las tablas de los cuatro routers:
+
+![Estado, traceroute, web e informe de pruebas](development/parte2/capturas/despliegue_estado_informe.png)
 
 El informe completo está transcrito en
 `doc/development/parte2/pruebas_despliegue.txt`.
 
-### 2.6.3. Matriz de accesos
+### 4.8.3. Matriz de accesos
 
 Desde cada equipo (filas) se hizo ping a todas las IPs de cada destino
-(columnas) y una petición HTTP al servidor web.
+(columnas) y una petición HTTP al servidor web:
 
 | Origen ↓ / Destino → | SRV | RA | RB | RC | RD | PC1 | PC2 | PC3 | PC4 | Prof. | Web (HTTP) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -737,7 +958,7 @@ Desde cada equipo (filas) se hizo ping a todas las IPs de cada destino
 | **PC4** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | 200 |
 | **Prof.** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | 200 |
 
-Caminos comprobados con `traceroute` (routers atravesados):
+Caminos comprobados con `traceroute`:
 
 | Origen → destino | Camino | Routers |
 |---|---|---|
@@ -750,59 +971,7 @@ Caminos comprobados con `traceroute` (routers atravesados):
 El número de routers coincide con el TTL de las respuestas: 64 en la misma
 red, 63 con 1 router y 61 con 3 routers.
 
-### 2.6.4. Verificación manual dentro de cada VM
-
-Antes de automatizar se verificó la red construida a mano, el 10/11/2026,
-tras reiniciar el anfitrión. En la consola de cada VM se mostraron sus
-interfaces (`ip -br a`) y su tabla del kernel (`ip route`). En los routers
-también la tabla de FRR (`show ip route`) y en el servidor el puerto 3000
-en escucha. Después se lanzó la prueba de conectividad global. Resultado en
-las 9 VMs: **18/18 IPs, web=200, fallan: ninguna**. La transcripción está en
-`doc/development/parte2/verificacion_final.txt`.
-
-![RA: interfaces, rutas del kernel instaladas por FRR (`proto static`), `show ip route` y conectividad 18/18](development/parte2/capturas/verificacion_ra.webp)
-
-![RB: las cuatro rutas a las redes de PC y la ruta por defecto hacia RA](development/parte2/capturas/verificacion_rb.webp)
-
-![RC](development/parte2/capturas/verificacion_rc.webp)
-
-![RD](development/parte2/capturas/verificacion_rd.webp)
-
-![SRV: servidor web escuchando en el puerto 3000](development/parte2/capturas/verificacion_srv.webp)
-
-![PC1](development/parte2/capturas/verificacion_pc1.webp)
-
-![PC2](development/parte2/capturas/verificacion_pc2.webp)
-
-![PC3](development/parte2/capturas/verificacion_pc3.webp)
-
-![PC4](development/parte2/capturas/verificacion_pc4.webp)
-
-Desde el anfitrión, en esa misma verificación:
-
-```
-traceroute -n 10.0.4.10:  10.200.0.1 → 10.1.0.2 → 10.3.0.2 → 10.0.4.10
-curl http://10.100.0.11:3000/record?id_nodo=profesor...  →  Saving: ...
-```
-
-### 2.6.5. Pruebas paso a paso durante la construcción
-
-| Paso | Prueba | Resultado |
-|---|---|---|
-| Red de servidores | RA ↔ SRV (ping) | ✅ |
-| Enlace RA–RB | RB → RA. RB → SRV antes de configurar rutas | ✅ / ❌ *Network is unreachable* (esperado) |
-| Rutas en RA y RB | RB → SRV (ping; traceroute `10.1.0.1` → `10.100.0.11`) | ✅ |
-| Rama de RC | RC → SRV (traceroute `10.2.0.1` → `10.1.0.1` → `10.100.0.11`) | ✅ tras corregir la incidencia de la ruta perdida (sección 2.9) |
-| PC1 y PC2 | PC2 → RC, PC1, SRV (traceroute de 4 saltos) | ✅ |
-| Rama de RD | PC3 → RD, SRV. PC4 → RD, PC3, PC1, SRV | ✅ |
-| PC Profesor | Anfitrión → RA, SRV, PC1; traceroute a PC4 | ✅ |
-| Servidor web | `curl` y `/record` desde PC1, PC4 y el anfitrión; CSV creados en SRV | ✅ |
-
-### 2.6.6. Servicio web
-
-El servidor de la parte 1 (SSR-master-server) se reutiliza en SRV como
-servicio systemd `ssr-server`, con el usuario sin privilegios `nodeapp`.
-Escucha en `*:3000`.
+### 4.8.4. Servicio web
 
 | Origen | Petición | Resultado |
 |---|---|---|
@@ -814,12 +983,10 @@ Escucha en `*:3000`.
 El mes del nombre del CSV aparece uno menos (9 en octubre) porque el
 servidor usa `getMonth()` de JavaScript, que numera los meses desde 0.
 
-## 2.7. Consumo de recursos
+## 4.9. Consumo de la red virtualizada
 
 Medido con las 9 VMs en marcha, con la RAM de la plantilla de Moodle (1 GB y
-2 vCPU por VM).
-
-### Memoria
+2 vCPU por VM):
 
 | VM | RAM asignada | RAM real en el anfitrión (RSS de QEMU) |
 |---|---|---|
@@ -828,19 +995,6 @@ Medido con las 9 VMs en marcha, con la RAM de la plantilla de Moodle (1 GB y
 | PC1 / PC2 / PC3 / PC4 | 1 GB cada una | 688 / 692 / 688 / 687 MiB |
 | **Total** | **9 GB** | **6291 MiB (6.1 GiB), un 20 % de la RAM del anfitrión** |
 
-- KVM sólo reserva las páginas que el invitado toca, por eso cada VM ocupa
-  unos 690 MiB y no 1 GB. Con VirtualBox (parte 1), una VM de 1 GB ocupaba
-  1.07 GiB.
-- El servidor ocupa algo más (760 MiB) por el proceso de Node.js.
-- El consumo real (6.1 GiB) es menor que la estimación de la parte 1 para la
-  réplica reducida con 1 GB por VM (9.6 GiB).
-- Ajuste posible: la primera versión automatizada asignaba 384 MB a routers
-  y PC y 768 MB al servidor, y las 9 VMs ocuparon 3.6 GiB, casi la mitad
-  (`doc/development/historico_script/`). Con `despliegue.py crear --ram 384`
-  se reduce la RAM de todas las VMs.
-
-### Disco
-
 | Disco | Tamaño real |
 |---|---|
 | `base.qcow2` (imagen de Moodle, intacta) | 2.0 GB |
@@ -848,48 +1002,49 @@ Medido con las 9 VMs en marcha, con la RAM de la plantilla de Moodle (1 GB y
 | Disco diferencial de cada VM | 136–146 MB |
 | **Total (11 ficheros)** | **≈ 4.5 GB** |
 
-Con la cadena `base ← molde ← VM`, las 9 VMs sólo añaden unos 1.25 GB entre
-todas. Copiar la imagen completa para cada una costaría unos 29 GB
-(9 × 3.2 GB).
+- KVM sólo reserva las páginas que el invitado usa, por eso cada VM ocupa
+  unos 690 MiB y no 1 GB. Con VirtualBox (sección 3), una VM de 1 GB ocupaba
+  1.07 GiB.
+- El consumo real (6.1 GiB y 4.5 GB) es menor que la estimación de la sección
+  3.4 para la réplica reducida con 1 GB por VM (9.6 GiB y 19 GB).
+- Con la cadena `base ← molde ← VM`, las 9 VMs sólo añaden unos 1.25 GB
+  entre todas. Copiar la imagen completa para cada una costaría unos 29 GB.
+- Se puede reducir más: la primera versión automatizada asignaba 384 MB a
+  routers y PC y 768 MB al servidor, y las 9 VMs ocupaban 3.6 GiB. Con
+  `crear --ram 384` se reduce la RAM de todas las VMs.
 
-## 2.8. Configuraciones adicionales a las mínimas
+## 4.10. Configuraciones adicionales a las mínimas
 
 **En las máquinas virtuales:**
 
-- Hostname propio en cada VM (`ra`, `rb`, …, `pc4`).
-- Servidor web como servicio **systemd** con usuario sin privilegios y
-  reinicio automático.
-- **SSH** con clave del anfitrión en todas las VMs, para administrarlas y
-  probarlas sin contraseña. Cada VM tiene sus propias claves de host.
-- Nombres de interfaz predecibles (`eth0…eth2`, en el orden del XML).
-- Herramientas de diagnóstico en todas las VMs: `traceroute`, `tcpdump` y
-  `curl`.
+- hostname propio en cada VM (`ra`, `rb`, …, `pc4`);
+- servidor web como servicio systemd con usuario sin privilegios y reinicio
+  automático;
+- SSH con la clave del anfitrión y claves de host propias en cada VM;
+- herramientas de diagnóstico en todas: `traceroute`, `tcpdump` y `curl`;
+- en cada `/etc/network/interfaces`, comentarios con el puerto del plano.
 
 **En la Software Routing Suite (FRR):**
 
-- Configuración integrada (`service integrated-vtysh-config`), guardada con
-  `write memory` y con hostname de router (`RA`…`RD`) en el prompt de
-  `vtysh`.
-- Sólo se activan los demonios necesarios: `zebra` y `staticd`.
-- **Robustez de las rutas.** Si el router va cargado, `watchfrr` puede
-  reiniciar `staticd` por separado y éste no vuelve a leer `frr.conf`, de modo
-  que se pierden las rutas. Se aplican dos medidas:
-  - un *drop-in* de systemd que vuelve a aplicar la configuración con
-    `vtysh -b` cuando FRR arranca;
-  - unos tiempos de `watchfrr` más tolerantes (`-t 60 -T 90`).
+- configuración integrada (`service integrated-vtysh-config`) guardada con
+  `write memory`, y hostname de router (`RA`…`RD`) en `vtysh`;
+- sólo los demonios necesarios: `zebra` y `staticd`;
+- **robustez de las rutas:** si el router va cargado, `watchfrr` puede
+  reiniciar `staticd` por separado, y éste no vuelve a leer `frr.conf`, con lo
+  que se pierden las rutas. Para evitarlo hay dos medidas:
+  - un *drop-in* de systemd que vuelve a aplicar la configuración
+    (`vtysh -b`) cada vez que FRR arranca;
+  - tiempos de `watchfrr` más tolerantes (`-t 60 -T 90`).
 
-**En el script y el anfitrión:**
+**En el script:**
 
-- Plan de pruebas automático con informe en fichero (`--informe`).
-- Cadena de discos `base ← molde ← VM`: despliegue rápido y poco disco.
-- Órdenes de ciclo de vida completas: `parar`, `arrancar`, `destruir`,
-  `estado` y `consola`.
-- Convivencia con la parte 1: descarga VirtualBox antes de usar KVM; el
-  Vagrantfile hace lo contrario.
-- `bridge-nf-call-iptables=0` para que el cortafuegos de Docker no filtre el
-  tráfico entre VMs.
+- plan de pruebas automático, con informe en fichero;
+- ciclo de vida completo: `parar`, `arrancar`, `destruir`, `estado` y
+  `consola`;
+- convivencia con la parte 1: descarga VirtualBox antes de usar KVM;
+- funciona también en equipos sin KVM, con emulación software.
 
-## 2.9. Incidencias encontradas
+## 4.11. Incidencias encontradas
 
 **Construcción manual:**
 
@@ -897,45 +1052,101 @@ todas. Copiar la imagen completa para cada una costaría unos 29 GB
 |---|---|---|
 | RC → SRV: *Destination Net Unreachable* desde RB | `systemctl restart networking` en RB borró del kernel la ruta por defecto que había instalado FRR, y FRR no la reinstaló | `systemctl restart frr` tras reiniciar la red de un router |
 | PC3 → RD: *Destination Host Unreachable* | RD aún no existía: nadie respondía al ARP de la puerta de enlace | Crear y configurar RD |
-| `virsh start`: *Cannot get interface MTU on 'br-…'* | Los bridges no sobreviven al reinicio del anfitrión | `red.sh` (y ahora `despliegue.py arrancar`) los recrea |
+| `virsh start`: *Cannot get interface MTU on 'br-…'* | Los bridges no sobreviven al reinicio del anfitrión | `despliegue.py arrancar` los vuelve a crear |
 | `virsh define`: *domain already exists with uuid* | El XML no lleva UUID y la máquina ya estaba definida | `undefine` antes de `define`. El script lo hace siempre |
 | Dos bloques `<interface>` idénticos en un XML | Error al editar el XML a mano | Generar los XML con lxml desde la plantilla |
-| `virsh list` sin `sudo` aparece vacío | Sin `sudo` se usa `qemu:///session` en vez de `qemu:///system` | `sudo virsh`. El script usa siempre `-c qemu:///system` |
-| `npm start`: `EADDRINUSE` | Doble `listen(3000)` en el servidor (igual que en la parte 1) | El servicio ejecuta `node app.js` |
+| `virsh list` sin `sudo` aparece vacío | Sin `sudo` se usa `qemu:///session` en vez de `qemu:///system` | El script usa siempre `-c qemu:///system` |
 
 **Automatización:**
 
 | Incidencia | Causa | Solución |
 |---|---|---|
-| Las VMs arrancaban sin `sshd` | La imagen base no trae claves de host SSH (las genera cloud-init en el primer arranque) | El script genera las claves en cada disco (`ssh-keygen -A`) antes de arrancarla |
-| `npm: command not found` al construir el molde con el repositorio de NodeSource inaccesible | Se instalaba el Node.js 10 de Ubuntu, sin `npm`. La tubería `curl \| bash` ocultaba el error | Alternativa con los binarios oficiales de nodejs.org y `set -o pipefail` |
+| Las VMs arrancaban sin `sshd` | La imagen base no trae claves de host SSH (las genera cloud-init en el primer arranque) | El script genera las claves en cada disco (`ssh-keygen -A`) antes de arrancar la VM |
+| `npm: command not found` al construir el molde | Sin acceso al repositorio de NodeSource se instalaba el Node.js 10 de Ubuntu, sin `npm`, y la tubería `curl \| bash` ocultaba el error | Alternativa con los binarios de nodejs.org y `set -o pipefail` |
 | `node` no encontrado dentro de `virt-customize` | `virt-customize` ejecuta con un PATH mínimo, sin `/usr/local/bin` | `PATH` explícito en `preparar_molde.sh` |
 | `crear` abortaba si un router tardaba en responder por SSH | Una orden SSH que vencía el tiempo de espera lanzaba una excepción | Se trata como «aún no lista» y se reintenta |
 
-## 2.10. Conclusiones
+## 4.12. Conclusiones
 
-1. La red del laboratorio 3103 queda desplegada con QEMU-KVM, con **una
-   sola orden** (`crear`), a partir de la imagen y el XML de Moodle, y
-   verificada con otra (`probar`): **36/36 pruebas**. Hay 179 pings correctos:
-   17 desde el anfitrión y 9 × 18 desde las VMs. Todos los equipos acceden
-   a la web.
-2. Con un diseño jerárquico basta con **8 rutas estáticas**: rutas por
-   defecto en los extremos y el detalle sólo en RB.
-3. Construirla primero a mano permitió entender y documentar cada pieza
-   (bridges, taps, XML, FRR) y detectar los problemas que el script resuelve
-   de forma sistemática.
+1. La red del laboratorio 3103 se despliega con QEMU-KVM con **una sola
+   orden** (`crear`), a partir de la imagen y el XML de Moodle, y se verifica
+   con otra (`probar`): **36/36 pruebas**. Todos los equipos se alcanzan entre
+   sí y acceden al servicio web.
+2. Con un diseño jerárquico bastan **8 rutas estáticas**: rutas por defecto
+   en los extremos y el detalle sólo en RB.
+3. Construir la red primero a mano permitió entender cada pieza (bridges,
+   taps, XML, FRR) y detectar los problemas que el script resuelve de forma
+   sistemática.
 4. KVM con discos diferenciales es mucho más eficiente que la estimación
-   hecha con VirtualBox en la parte 1: 6.1 GiB de RAM y 4.5 GB de disco para
-   9 VMs, frente a 9.6 GiB y 19 GB estimados.
+   hecha con VirtualBox: 6.1 GiB de RAM y 4.5 GB de disco para 9 VMs, frente
+   a 9.6 GiB y 19 GB.
 
-# Documentos complementarios
+# 5. Anexo
 
-| Documento | Contenido |
+## 5.1. Bibliografía
+
+[1] HashiCorp, «Vagrant Documentation». [En línea]. Disponible:
+https://developer.hashicorp.com/vagrant/docs
+
+[2] R. Ruiz, «Entornos virtuales de desarrollo con Vagrant», Raulr.net.
+[En línea]. Disponible:
+https://www.raulr.net/Entornos-virtuales-desarrollo-Vagrant/
+
+[3] F5, «What Is Multi-Homing?», F5. [En línea]. Disponible:
+https://www.f5.com/glossary/multi-homing
+
+[4] Oracle, «Oracle VirtualBox User Guide». [En línea]. Disponible:
+https://www.virtualbox.org/manual/
+
+[5] GISAI, «SSR-master-server», GitHub. [En línea]. Disponible:
+https://github.com/gisai/SSR-master-server
+
+[6] NodeSource, «NodeSource Node.js Binary Distributions», GitHub. [En
+línea]. Disponible: https://github.com/nodesource/distributions
+
+[7] systemd, «systemd.service — Service unit configuration». [En línea].
+Disponible: https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html
+
+[8] libvirt, «Domain XML format». [En línea]. Disponible:
+https://libvirt.org/formatdomain.html
+
+[9] libvirt, «virsh — management user interface». [En línea]. Disponible:
+https://www.libvirt.org/manpages/virsh.html
+
+[10] lxml, «The lxml.etree Tutorial». [En línea]. Disponible:
+https://lxml.de/tutorial.html
+
+[11] QEMU, «QEMU disk image utility (qemu-img)». [En línea]. Disponible:
+https://www.qemu.org/docs/master/tools/qemu-img.html
+
+[12] libguestfs, «virt-customize — Customize a virtual machine». [En
+línea]. Disponible: https://libguestfs.org/virt-customize.1.html
+
+[13] FRRouting, «Static Route Commands (staticd)». [En línea]. Disponible:
+https://docs.frrouting.org/en/latest/static.html
+
+[14] FRRouting, «VTY shell (vtysh)». [En línea]. Disponible:
+https://docs.frrouting.org/en/latest/vtysh.html
+
+[15] Python Software Foundation, «logging — Logging facility for Python».
+[En línea]. Disponible: https://docs.python.org/3/library/logging.html
+
+[16] AMD, «AMD EPYC 9005 Series Processors». [En línea]. Disponible:
+https://www.amd.com/en/products/processors/server/epyc/9005-series.html
+
+[17] Intel, «Intel Xeon 6 Processors». [En línea]. Disponible:
+https://www.intel.com/content/www/us/en/products/details/processors/xeon.html
+
+[18] The Linux Kernel documentation, «Kernel Samepage Merging». [En línea].
+Disponible: https://docs.kernel.org/admin-guide/mm/ksm.html
+
+## 5.2. Material del repositorio
+
+| Ruta | Contenido |
 |---|---|
-| `doc/entregables/guia_paso_a_paso.pdf` | Construcción manual de la parte 2, orden a orden, con las salidas y los errores |
-| `doc/entregables/requisitos_punto_a_punto.pdf` | Cada frase del enunciado con la línea exacta, cómo se cumple y la evidencia |
-| `doc/entregables/red_laboratorio_3103.pdf` | Conexiones, accesos y pruebas de la red manual |
-| `doc/entregables/diagrama_red_lab3103.pdf`, `diagrama_construccion_lab3103.pdf` | Diagramas de la red y de las órdenes con que se crea cada elemento |
-| `doc/entregables/manual_usuario.pdf` | Manual de uso de las dos partes |
-| `doc/development/parte1/consumo_raw.txt` | Medidas en bruto de la parte 1 |
+| `parte1-vagrant/Vagrantfile` | Script de la parte 1 |
+| `parte2/despliegue.py` y `parte2/{plantilla.xml, molde/, vm/}` | Script de la parte 2 y ficheros que usa |
+| `doc/entregables/como_ejecutar.txt` | Instrucciones breves para ejecutar las dos partes |
+| `doc/development/enunciado/` | Enunciado y plano del laboratorio 3103 |
+| `doc/development/parte1/consumo_raw.txt` | Medidas en bruto del estudio de consumo |
 | `doc/development/parte2/` | Capturas de pantalla, verificación manual e informe de pruebas del script |

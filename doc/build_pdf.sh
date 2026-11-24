@@ -11,6 +11,8 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 SRC="$DIR/entregables/src"
 OUT="$DIR/entregables"
 CSS="$SRC/estilo.css"
+FILTRO="$SRC/include.lua"      # inserta el código de los scripts en la memoria
+cd "$DIR/.."                   # raíz del repositorio: rutas de include.lua
 
 navegador() {
     for b in chromium chromium-browser google-chrome google-chrome-stable \
@@ -28,12 +30,13 @@ for md in "$SRC"/*.md; do
     if BROWSER=$(navegador); then
         html=$(mktemp --suffix=.html)
         pandoc "$md" -s --toc --toc-depth=2 --embed-resources --css "$CSS" \
+            --lua-filter "$FILTRO" \
             --resource-path="$SRC:$DIR" -o "$html"
         "$BROWSER" --headless --no-sandbox --disable-gpu --no-pdf-header-footer \
             --print-to-pdf="$pdf" "file://$html" 2>/dev/null
         rm -f "$html"
     else
-        pandoc "$md" --toc --pdf-engine=xelatex -V geometry:margin=2cm \
+        pandoc "$md" --toc --lua-filter "$FILTRO" --pdf-engine=xelatex -V geometry:margin=2cm \
             --resource-path="$SRC:$DIR" -o "$pdf"
     fi
 done
