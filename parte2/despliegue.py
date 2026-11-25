@@ -275,7 +275,16 @@ def crear_disco(vm):
                 "--run-command", "systemctl enable frr"]
     elif rol == "server":
         cmd += ["--run-command", "systemctl enable ssr-server"]
-    sh(cmd)
+    try:
+        sh(cmd, capture=True)
+    except RuntimeError as e:
+        if "guestfs_launch failed" in str(e):
+            raise RuntimeError(
+                f"{e}\nlibguestfs no ha podido arrancar su máquina auxiliar. Diagnóstico:\n"
+                "  sudo libguestfs-test-tool 2>&1 | tail -40\n"
+                "Si funcionaba antes (p. ej. tras actualizar el kernel), vacíe su caché y repita:\n"
+                "  sudo rm -rf /var/tmp/.guestfs-0") from None
+        raise
     return disco
 
 
@@ -514,6 +523,10 @@ def cmd_probar(args):
         if detalle:
             informe.extend("      " + l for l in detalle.strip().splitlines())
 
+    en_marcha = set(virsh("list", "--name").stdout.split())
+    if not en_marcha & set(VMS):
+        sys.exit("No hay ninguna VM del laboratorio en marcha: ejecute antes "
+                 "'sudo ./despliegue.py crear' (con --completo si es el caso)")
     esperar(list(VMS), args.espera)
 
     print("\n1) Anfitrión (PC Profesor) -> todas las IPs del laboratorio y servidor web")
