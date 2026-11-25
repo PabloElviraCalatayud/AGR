@@ -24,12 +24,21 @@ Discos en /var/lib/libvirt/images/lab3103:
   sudo ./despliegue.py consola ra rb    xterm con 'virsh console' (en segundo plano)
   sudo ./despliegue.py parar | arrancar
   sudo ./despliegue.py destruir         borra VMs, discos de VM, bridges y rutas
+  sudo ./despliegue.py consumo          RAM real de cada VM, del anfitrión y disco
+
+Laboratorio completo del plano (38 equipos: 4 routers, SRV1 y SRV2 y 8 PC por
+red) con la opción global --completo, p. ej. con 512 MB y 1 CPU por VM:
+  sudo ./despliegue.py --completo crear --ram 512 --cpus 1 --espera 1800
+  sudo ./despliegue.py --completo consumo
+  sudo ./despliegue.py --completo probar
        ./despliegue.py xml              sólo genera los XML en xml/ (sin root)
 """
 
 import argparse
+import ipaddress
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -78,6 +87,16 @@ ANFITRION_IP = "10.200.0.2/30"       # PC Profesor, en br-prof
 ANFITRION_GW = "10.200.0.1"          # RA ge0/0/5
 WEB = "http://10.100.0.11:3000/"
 TODAS_LAS_IPS = [ip for _, _, ips in VMS.values() for ip in ips] + ["10.200.0.2"]
+
+
+def laboratorio_completo():
+    """--completo: el plano tiene 2 servidores (VMs de SRV1 .11 y SRV2 .21) y
+    8 PC por red. Se añaden SRV2 y los PC .11-.17 de cada red (pcN-2..pcN-8)."""
+    VMS["srv2"] = ("server", ["br-srv"], ["10.100.0.21"])
+    for red in range(1, 5):
+        for n in range(2, 9):
+            VMS[f"pc{red}-{n}"] = ("pc", [f"br-red{red}"], [f"10.0.{red}.{9 + n}"])
+    TODAS_LAS_IPS[:] = [ip for _, _, ips in VMS.values() for ip in ips] + ["10.200.0.2"]
 
 # Reaplicar la configuración de FRR al arrancar: si watchfrr reinicia staticd
 # por separado (máquina cargada) éste no relee frr.conf y se pierden las rutas.
@@ -167,7 +186,7 @@ def limpiar_anfitrion():
 # --------------------------------------------------------------------------
 # XML (lxml, a partir de la plantilla de Moodle)
 # --------------------------------------------------------------------------
-def generar_xml(vm, disco, ram_mb=None, emular=False):
+def generar_xml(vm, disco, ram_mb=None, emular=False, cpus=None):
     """Hace con lxml los mismos cambios que el sed de la guía."""
     try:
         from lxml import etree
@@ -181,6 +200,8 @@ def generar_xml(vm, disco, ram_mb=None, emular=False):
     if ram_mb:
         for e in ("memory", "currentMemory"):
             raiz.find(e).text = str(ram_mb * 1024)            # KiB
+    if cpus:
+        raiz.find("vcpu").text = str(cpus)
     if emular:                       # sin KVM: emulación software (lenta)
         raiz.set("type", "qemu")
 
@@ -207,6 +228,25 @@ def clave_ssh():
     return CLAVE.with_suffix(".pub")
 
 
+def interfaces(vm):
+    """/etc/network/interfaces de la VM: el de vm/<vm>/ o, para los equipos del
+    laboratorio completo, generado con el plan (puerta de enlace: la .1 de su red)."""
+    fichero = AQUI / "vm" / vm / "interfaces"
+    if fichero.exists():
+        return fichero
+    rol, brs, ips = VMS[vm]
+    texto = "auto lo\niface lo inet loopback\n"
+    for i, (br, ip) in enumerate(zip(brs, ips)):
+        red = ipaddress.ip_network(REDES[br][0])
+        texto += (f"\n# {REDES[br][1]} {red}\nauto eth{i}\niface eth{i} inet static\n"
+                  f"    address {ip}/{red.prefixlen}\n")
+        if rol != "router" and i == 0:
+            texto += f"    gateway {next(red.hosts())}\n"
+    generado = Path(tempfile.mkdtemp()) / "interfaces"
+    generado.write_text(texto)
+    return generado
+
+
 def crear_disco(vm):
     """Disco diferencial sobre el molde + configuración escrita antes de arrancar."""
     disco = DIR / f"{vm}.qcow2"
@@ -216,7 +256,7 @@ def crear_disco(vm):
     cfg = AQUI / "vm" / vm
     cmd = ["virt-customize", "-q", "-a", disco,
            "--hostname", vm,
-           "--upload", f"{cfg / 'interfaces'}:/etc/network/interfaces",
+           "--upload", f"{interfaces(vm)}:/etc/network/interfaces",
            "--ssh-inject", f"root:file:{clave_ssh()}",
            # claves de host propias de cada VM (las imágenes cloud no las traen
            # y sin ellas sshd no arranca)
@@ -286,7 +326,8 @@ def cmd_xml(args):
     salida = AQUI / "xml"
     salida.mkdir(exist_ok=True)
     for vm in seleccion(args):
-        (salida / f"{vm}.xml").write_text(generar_xml(vm, DIR / f"{vm}.qcow2", args.ram))
+        (salida / f"{vm}.xml").write_text(generar_xml(vm, DIR / f"{vm}.qcow2", args.ram,
+                                                      cpus=args.cpus))
     print(f"XML generados en {salida}")
 
 
@@ -296,6 +337,14 @@ def cmd_crear(args):
     if not MOLDE.exists():
         cmd_molde(argparse.Namespace(rehacer=False, proxy=args.proxy))
     preparar_anfitrion()
+    if args.ram:
+        libre = int(re.search(r"MemAvailable:\s+(\d+)", Path("/proc/meminfo").read_text())
+                    .group(1)) // 1024
+        hace_falta = args.ram * len(seleccion(args))
+        info(f"RAM asignada a las VMs: {hace_falta} MB; disponible en el anfitrión: {libre} MB")
+        if hace_falta > libre:
+            log.warning("Las VMs tienen asignada más RAM de la disponible: "
+                        "KVM sólo reserva la que usan, pero puede faltar memoria")
     xmls = DIR / "xml"
     xmls.mkdir(exist_ok=True)
     for vm in seleccion(args):
@@ -306,7 +355,7 @@ def cmd_crear(args):
         disco = crear_disco(vm)
         xml = xmls / f"{vm}.xml"
         xml.write_text(generar_xml(vm, disco, args.ram,
-                                   emular=not Path("/dev/kvm").exists()))
+                                   emular=not Path("/dev/kvm").exists(), cpus=args.cpus))
         virsh("define", xml)
         virsh("start", vm)
     esperar(seleccion(args), args.espera)
@@ -334,6 +383,8 @@ def cmd_parar(args):
 
 def cmd_destruir(args):
     root()
+    if not args.vms:
+        laboratorio_completo()           # borra también los del laboratorio completo
     for vm in seleccion(args):
         virsh("destroy", vm, check=False)
         virsh("undefine", vm, check=False)
@@ -346,12 +397,12 @@ def cmd_destruir(args):
 
 
 def cmd_estado(args):
-    print(f"\n{'VM':<5} {'ESTADO':<12} {'ROL':<7} TARJETAS")
+    print(f"\n{'VM':<6} {'ESTADO':<12} {'ROL':<7} TARJETAS")
     for vm, (rol, brs, ips) in VMS.items():
         r = virsh("domstate", vm, check=False)
         estado = r.stdout.strip() if r.returncode == 0 else "no definida"
         tarjetas = "  ".join(f"eth{i}:{br}:{ip}" for i, (br, ip) in enumerate(zip(brs, ips)))
-        print(f"{vm:<5} {estado:<12} {rol:<7} {tarjetas}")
+        print(f"{vm:<6} {estado:<12} {rol:<7} {tarjetas}")
 
 
 def cmd_consola(args):
@@ -363,6 +414,38 @@ def cmd_consola(args):
             print(f"{vm}: consola abierta (root / agr; salir con Ctrl+])")
         else:
             print(f"Sin xterm: sudo virsh console {vm}")
+
+
+def cmd_consumo(args):
+    """RAM real de cada VM (RSS de su proceso QEMU), memoria del anfitrión y disco."""
+    root()
+    procesos = sh(["ps", "-eo", "rss=,args="], capture=True).stdout.splitlines()
+    print(f"\n{'VM':<6} {'ASIGNADA':>9} {'REAL (RSS)':>11}")
+    total_asig = total_rss = n = 0
+    for vm in VMS:
+        rss = sum(int(l.split()[0]) for l in procesos
+                  if "qemu" in l and f"guest={vm}," in l) // 1024
+        asig = 0
+        r = virsh("dominfo", vm, check=False)
+        m = re.search(r"Max memory:\s+(\d+)", r.stdout)
+        if m:
+            asig = int(m.group(1)) // 1024
+        if rss:
+            n += 1
+        total_asig += asig if rss else 0
+        total_rss += rss
+        print(f"{vm:<6} {asig:>6} MB {rss:>8} MB")
+    mem = dict((k, int(v.split()[0]) // 1024) for k, v in
+               (l.split(":", 1) for l in Path("/proc/meminfo").read_text().splitlines()))
+    print(f"\nVMs en marcha: {n}   RAM asignada: {total_asig} MB   "
+          f"RAM real: {total_rss} MB ({total_rss / 1024:.1f} GiB)")
+    print(f"Anfitrión: {mem['MemTotal']} MB en total, {mem['MemAvailable']} MB disponibles")
+    ksm = Path("/sys/kernel/mm/ksm/pages_sharing")
+    if ksm.exists() and int(ksm.read_text()):
+        print(f"KSM: {int(ksm.read_text()) * 4 // 1024} MB compartidos entre VMs")
+    discos = sorted(DIR.glob("*.qcow2"))
+    real = sum(d.stat().st_blocks * 512 for d in discos) // 2**20
+    print(f"Disco: {len(discos)} ficheros qcow2, {real} MB ocupados en {DIR}")
 
 
 # --- Pruebas -----------------------------------------------------------------
@@ -399,8 +482,8 @@ def esperar(vms, timeout):
                 ok = r.returncode == 0 or (r.returncode == 255
                                            and time.time() - primer_ping[vm] > 60)
             if ok and VMS[vm][0] == "server":     # servidor web escuchando
-                ok = sh(["curl", "-s", "-o", "/dev/null", "--max-time", "5", WEB],
-                        check=False, capture=True).returncode == 0
+                ok = sh(["curl", "-s", "-o", "/dev/null", "--max-time", "5",
+                         f"http://{ip}:3000/"], check=False, capture=True).returncode == 0
             if ok:
                 log.info("%s lista", vm)
                 pendientes.discard(vm)
@@ -410,11 +493,13 @@ def esperar(vms, timeout):
         log.warning("No responden tras %ss: %s", timeout, " ".join(sorted(pendientes)))
 
 
-PRUEBA_VM = ("ok=0; fail=''; for ip in " + " ".join(TODAS_LAS_IPS) + "; do "
-             "if ping -c1 -W1 $ip >/dev/null 2>&1; then ok=$((ok+1)); "
-             "else fail=\"$fail $ip\"; fi; done; "
-             "web=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 " + WEB + "); "
-             "echo \"$ok $web$fail\"")
+def prueba_vm():
+    """Orden que se ejecuta en cada VM: ping a todas las IPs y acceso web."""
+    return ("ok=0; fail=''; for ip in " + " ".join(TODAS_LAS_IPS) + "; do "
+            "if ping -c1 -W1 $ip >/dev/null 2>&1; then ok=$((ok+1)); "
+            "else fail=\"$fail $ip\"; fi; done; "
+            "web=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 " + WEB + "); "
+            "echo \"$ok $web$fail\"")
 
 
 def cmd_probar(args):
@@ -450,9 +535,9 @@ def cmd_probar(args):
         lineas = r.stdout.strip().splitlines()
         anotar("anfitrion", f"traceroute {ip}", bool(lineas) and ip in lineas[-1], r.stdout)
 
-    print("\n3) Desde cada VM: ping a las 18 IPs y acceso web (por SSH)")
+    print(f"\n3) Desde cada VM: ping a las {len(TODAS_LAS_IPS)} IPs y acceso web (por SSH)")
     for vm, (rol, _, ips) in VMS.items():
-        r = ssh(ips[0], PRUEBA_VM, 120)
+        r = ssh(ips[0], prueba_vm(), 180)
         if r.returncode != 0 or not r.stdout.strip():
             anotar(vm, "conectividad global (sin acceso SSH)", False, r.stderr)
             continue
@@ -483,6 +568,8 @@ def main():
                                 formatter_class=argparse.RawDescriptionHelpFormatter,
                                 epilog=__doc__)
     p.add_argument("-v", "--verbose", action="store_true", help="trazas de depuración")
+    p.add_argument("--completo", action="store_true",
+                   help="laboratorio completo del plano: 38 equipos (2 servidores, 8 PC por red)")
     sub = p.add_subparsers(dest="orden", required=True)
 
     def orden(nombre, func, ayuda, vms=False):
@@ -498,20 +585,25 @@ def main():
     s.add_argument("--proxy", help="proxy HTTP(S) para descargar paquetes")
     s = orden("crear", cmd_crear, "despliega las VMs (discos, XML, define, start)", vms=True)
     s.add_argument("--ram", type=int, help="RAM por VM en MB (por defecto, la de la plantilla)")
+    s.add_argument("--cpus", type=int, help="CPUs por VM (por defecto, las de la plantilla)")
     s.add_argument("--espera", type=int, default=300, help="segundos de espera al arranque")
     s.add_argument("--proxy", help="proxy para construir el molde si no existe")
     orden("arrancar", cmd_arrancar, "prepara el anfitrión y arranca las VMs", vms=True)
     orden("parar", cmd_parar, "apaga las VMs ordenadamente", vms=True)
     orden("destruir", cmd_destruir, "elimina VMs, sus discos, bridges y rutas", vms=True)
     orden("estado", cmd_estado, "estado de las VMs")
+    orden("consumo", cmd_consumo, "RAM real de cada VM, memoria del anfitrión y disco")
     orden("consola", cmd_consola, "abre un xterm con la consola de cada VM", vms=True)
     s = orden("probar", cmd_probar, "plan de pruebas de conectividad global")
     s.add_argument("--informe", help="guarda el resultado en este fichero")
     s.add_argument("--espera", type=int, default=180)
     s = orden("xml", cmd_xml, "sólo genera los XML en xml/", vms=True)
     s.add_argument("--ram", type=int)
+    s.add_argument("--cpus", type=int)
 
     args = p.parse_args()
+    if args.completo:
+        laboratorio_completo()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(levelname)s: %(message)s")
     try:

@@ -65,9 +65,24 @@ El script hace, sin intervención, lo mismo que los pasos 0–12 de la guía:
 | `sudo ./despliegue.py parar` / `arrancar` | `virsh shutdown` de todas / preparar el anfitrión y `virsh start` |
 | `sudo ./despliegue.py destruir [vms]` | `virsh destroy` + `undefine`, borra sus discos y, sin argumentos, bridges y rutas. Conserva `base.qcow2` y `molde.qcow2` |
 | `./despliegue.py xml` | Sólo genera los XML en `xml/` (no necesita root) |
+| `sudo ./despliegue.py consumo` | RAM real de cada VM (RSS de su proceso QEMU), memoria disponible en el anfitrión y disco ocupado |
 
-Opciones: `-v` (trazas de depuración con `logging`), `crear --ram MB` (RAM por
-VM; por defecto la de la plantilla, 1 GB), `molde --proxy URL`.
+**Laboratorio completo.** Con la opción global `--completo` se despliegan los
+38 equipos del plano: los 4 routers, SRV1 (`srv`, 10.100.0.11), SRV2 (`srv2`,
+10.100.0.21) y 8 PC por red (`pcN` con la .10 y `pcN-2` … `pcN-8` con la .11 …
+.17). Su `/etc/network/interfaces` se genera a partir del plan. Por ejemplo,
+con 512 MB y 1 CPU por VM:
+
+```bash
+sudo ./despliegue.py --completo crear --ram 512 --cpus 1 --espera 1800
+sudo ./despliegue.py --completo consumo
+sudo ./despliegue.py --completo probar --informe /tmp/pruebas38.txt
+sudo ./despliegue.py destruir      # borra también los equipos del laboratorio completo
+```
+
+Opciones: `-v` (trazas de depuración con `logging`), `crear --ram MB` y
+`--cpus N` (RAM y CPUs por VM; por defecto, las de la plantilla: 1 GB y 2 CPUs),
+`molde --proxy URL`.
 
 Antes del primer uso hay que copiar la imagen de Moodle como
 `/var/lib/libvirt/images/lab3103/base.qcow2`. El script inyecta en cada VM una
