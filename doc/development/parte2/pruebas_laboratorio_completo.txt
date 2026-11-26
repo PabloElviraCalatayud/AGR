@@ -1,0 +1,145 @@
+Laboratorio completo (38 equipos: 4 routers, SRV1 y SRV2, 8 PC por red) con 512 MB y 1 CPU por VM
+sudo ./despliegue.py --completo crear --ram 512 --cpus 1 --espera 1800
+sudo ./despliegue.py --completo probar --informe /tmp/pruebas38.txt
+
+Plan de pruebas - 2026-11-26 18:48:19
+Resultado: 94/94 pruebas correctas
+
+[OK] anfitrion ping 10.100.0.11  (srv)
+[OK] anfitrion ping 10.100.0.1   (ra)
+[OK] anfitrion ping 10.1.0.1     (ra)
+[OK] anfitrion ping 10.200.0.1   (ra)
+[OK] anfitrion ping 10.1.0.2     (rb)
+[OK] anfitrion ping 10.2.0.1     (rb)
+[OK] anfitrion ping 10.3.0.1     (rb)
+[OK] anfitrion ping 10.2.0.2     (rc)
+[OK] anfitrion ping 10.0.1.1     (rc)
+[OK] anfitrion ping 10.0.2.1     (rc)
+[OK] anfitrion ping 10.3.0.2     (rd)
+[OK] anfitrion ping 10.0.3.1     (rd)
+[OK] anfitrion ping 10.0.4.1     (rd)
+[OK] anfitrion ping 10.0.1.10    (pc1)
+[OK] anfitrion ping 10.0.2.10    (pc2)
+[OK] anfitrion ping 10.0.3.10    (pc3)
+[OK] anfitrion ping 10.0.4.10    (pc4)
+[OK] anfitrion ping 10.100.0.21  (srv2)
+[OK] anfitrion ping 10.0.1.11    (pc1-2)
+[OK] anfitrion ping 10.0.1.12    (pc1-3)
+[OK] anfitrion ping 10.0.1.13    (pc1-4)
+[OK] anfitrion ping 10.0.1.14    (pc1-5)
+[OK] anfitrion ping 10.0.1.15    (pc1-6)
+[OK] anfitrion ping 10.0.1.16    (pc1-7)
+[OK] anfitrion ping 10.0.1.17    (pc1-8)
+[OK] anfitrion ping 10.0.2.11    (pc2-2)
+[OK] anfitrion ping 10.0.2.12    (pc2-3)
+[OK] anfitrion ping 10.0.2.13    (pc2-4)
+[OK] anfitrion ping 10.0.2.14    (pc2-5)
+[OK] anfitrion ping 10.0.2.15    (pc2-6)
+[OK] anfitrion ping 10.0.2.16    (pc2-7)
+[OK] anfitrion ping 10.0.2.17    (pc2-8)
+[OK] anfitrion ping 10.0.3.11    (pc3-2)
+[OK] anfitrion ping 10.0.3.12    (pc3-3)
+[OK] anfitrion ping 10.0.3.13    (pc3-4)
+[OK] anfitrion ping 10.0.3.14    (pc3-5)
+[OK] anfitrion ping 10.0.3.15    (pc3-6)
+[OK] anfitrion ping 10.0.3.16    (pc3-7)
+[OK] anfitrion ping 10.0.3.17    (pc3-8)
+[OK] anfitrion ping 10.0.4.11    (pc4-2)
+[OK] anfitrion ping 10.0.4.12    (pc4-3)
+[OK] anfitrion ping 10.0.4.13    (pc4-4)
+[OK] anfitrion ping 10.0.4.14    (pc4-5)
+[OK] anfitrion ping 10.0.4.15    (pc4-6)
+[OK] anfitrion ping 10.0.4.16    (pc4-7)
+[OK] anfitrion ping 10.0.4.17    (pc4-8)
+[OK] anfitrion HTTP GET http://10.100.0.11:3000/ -> 200
+[OK] anfitrion HTTP GET /record (escritura de datos)
+[OK] anfitrion traceroute 10.0.1.10
+      traceroute to 10.0.1.10 (10.0.1.10), 30 hops max, 60 byte packets
+       1  10.200.0.1  0.197 ms
+       2  10.1.0.2  0.184 ms
+       3  10.2.0.2  0.234 ms
+       4  10.0.1.10  0.377 ms
+[OK] anfitrion traceroute 10.0.2.10
+      traceroute to 10.0.2.10 (10.0.2.10), 30 hops max, 60 byte packets
+       1  10.200.0.1  0.033 ms
+       2  10.1.0.2  0.069 ms
+       3  10.2.0.2  0.111 ms
+       4  10.0.2.10  0.278 ms
+[OK] anfitrion traceroute 10.0.3.10
+      traceroute to 10.0.3.10 (10.0.3.10), 30 hops max, 60 byte packets
+       1  10.200.0.1  0.029 ms
+       2  10.1.0.2  0.051 ms
+       3  10.3.0.2  0.162 ms
+       4  10.0.3.10  0.289 ms
+[OK] anfitrion traceroute 10.0.4.10
+      traceroute to 10.0.4.10 (10.0.4.10), 30 hops max, 60 byte packets
+       1  10.200.0.1  0.035 ms
+       2  10.1.0.2  0.080 ms
+       3  10.3.0.2  0.125 ms
+       4  10.0.4.10  0.265 ms
+[OK] srv       47/47 IPs, web=200
+[OK] ra        47/47 IPs, web=200
+[OK] rb        47/47 IPs, web=200
+[OK] rc        47/47 IPs, web=200
+[OK] rd        47/47 IPs, web=200
+[OK] pc1       47/47 IPs, web=200
+[OK] pc2       47/47 IPs, web=200
+[OK] pc3       47/47 IPs, web=200
+[OK] pc4       47/47 IPs, web=200
+[OK] srv2      47/47 IPs, web=200
+[OK] pc1-2     47/47 IPs, web=200
+[OK] pc1-3     47/47 IPs, web=200
+[OK] pc1-4     47/47 IPs, web=200
+[OK] pc1-5     47/47 IPs, web=200
+[OK] pc1-6     47/47 IPs, web=200
+[OK] pc1-7     47/47 IPs, web=200
+[OK] pc1-8     47/47 IPs, web=200
+[OK] pc2-2     47/47 IPs, web=200
+[OK] pc2-3     47/47 IPs, web=200
+[OK] pc2-4     47/47 IPs, web=200
+[OK] pc2-5     47/47 IPs, web=200
+[OK] pc2-6     47/47 IPs, web=200
+[OK] pc2-7     47/47 IPs, web=200
+[OK] pc2-8     47/47 IPs, web=200
+[OK] pc3-2     47/47 IPs, web=200
+[OK] pc3-3     47/47 IPs, web=200
+[OK] pc3-4     47/47 IPs, web=200
+[OK] pc3-5     47/47 IPs, web=200
+[OK] pc3-6     47/47 IPs, web=200
+[OK] pc3-7     47/47 IPs, web=200
+[OK] pc3-8     47/47 IPs, web=200
+[OK] pc4-2     47/47 IPs, web=200
+[OK] pc4-3     47/47 IPs, web=200
+[OK] pc4-4     47/47 IPs, web=200
+[OK] pc4-5     47/47 IPs, web=200
+[OK] pc4-6     47/47 IPs, web=200
+[OK] pc4-7     47/47 IPs, web=200
+[OK] pc4-8     47/47 IPs, web=200
+[OK] ra        show ip route
+      Codes: K - kernel route, C - connected, S - static, R - RIP,
+      S>* 0.0.0.0/0 [1/0] via 10.1.0.2, eth1, 00:07:17
+      C>* 10.1.0.0/30 is directly connected, eth1, 00:07:18
+      C>* 10.100.0.0/24 is directly connected, eth0, 00:07:18
+      C>* 10.200.0.0/30 is directly connected, eth2, 00:07:18
+[OK] rb        show ip route
+      Codes: K - kernel route, C - connected, S - static, R - RIP,
+      S>* 0.0.0.0/0 [1/0] via 10.1.0.1, eth0, 00:07:09
+      S>* 10.0.1.0/24 [1/0] via 10.2.0.2, eth1, 00:07:09
+      S>* 10.0.2.0/24 [1/0] via 10.2.0.2, eth1, 00:07:09
+      S>* 10.0.3.0/24 [1/0] via 10.3.0.2, eth2, 00:07:09
+      S>* 10.0.4.0/24 [1/0] via 10.3.0.2, eth2, 00:07:09
+      C>* 10.1.0.0/30 is directly connected, eth0, 00:07:09
+      C>* 10.2.0.0/30 is directly connected, eth1, 00:07:09
+      C>* 10.3.0.0/30 is directly connected, eth2, 00:07:09
+[OK] rc        show ip route
+      Codes: K - kernel route, C - connected, S - static, R - RIP,
+      S>* 0.0.0.0/0 [1/0] via 10.2.0.1, eth0, 00:06:58
+      C>* 10.0.1.0/24 is directly connected, eth1, 00:06:58
+      C>* 10.0.2.0/24 is directly connected, eth2, 00:06:58
+      C>* 10.2.0.0/30 is directly connected, eth0, 00:06:58
+[OK] rd        show ip route
+      Codes: K - kernel route, C - connected, S - static, R - RIP,
+      S>* 0.0.0.0/0 [1/0] via 10.3.0.1, eth0, 00:06:46
+      C>* 10.0.3.0/24 is directly connected, eth1, 00:06:47
+      C>* 10.0.4.0/24 is directly connected, eth2, 00:06:47
+      C>* 10.3.0.0/30 is directly connected, eth0, 00:06:47
