@@ -108,9 +108,9 @@ anfitrión y en `http://localhost:3000` desde la máquina.
 
 # Estudio del consumo de memoria
 
-Hemos medido el consumo en el anfitrión (`ps`, `VBoxManage metrics`) y dentro
-de la máquina (`free`, `top`), en reposo y con una carga de 5000 peticiones al
-servidor. Como propone el enunciado, vigilamos el crecimiento de la imagen con:
+Hemos medido el consumo en el anfitrión (`ps`, `VBoxManage metrics`) y en la
+máquina (`free`, `top`), en reposo y con 5000 peticiones al servidor. Como
+propone el enunciado, vigilamos el crecimiento de la imagen con:
 
 ```
 watch "ls -al ~/VirtualBox\ VMs/agr-nodeserver/Snapshots/"
@@ -126,9 +126,8 @@ afectar al rendimiento.
 
 ### Consumo de CPU
 
-En reposo es prácticamente nulo (0.06 % del anfitrión). Durante la carga, la
-máquina sirvió 122 peticiones por segundo con su CPU al 24 %, y al anfitrión
-sólo le costó un 2.3 % de su CPU.
+En reposo es prácticamente nulo (0.06 % del anfitrión). Con carga, la máquina
+sirvió 122 peticiones por segundo y al anfitrión sólo le costó un 2.3 % de CPU.
 
 ### Almacenamiento
 
@@ -138,26 +137,24 @@ apreciable durante la carga: cada registro ocupa entre 50 y 80 bytes.
 
 ### Red virtualizada del laboratorio
 
-Replicar el laboratorio 3103 completo (4 routers, 2 servidores y 32 PC)
-supondría 38 máquinas, y la réplica reducida que permite el enunciado, 9. Cada
-máquina cuesta unos 1.07 GB de RAM y 2 GB de disco, o unos 0.32 GB de RAM si se
-ajusta a 256 MB:
+El laboratorio 3103 completo (4 routers, 2 servidores y 32 PC) son 38 máquinas.
+Con VirtualBox y 1 GB cada una necesitaría 41 GB de RAM y no cabría en nuestro
+equipo (30 GB). En la segunda parte lo hemos medido con KVM:
 
 | Escenario | Máquinas | RAM | Disco |
 |---|---|---|---|
-| Laboratorio completo, 1 GB por máquina | 38 | 41 GB | 77 GB |
-| Laboratorio completo, RAM ajustada | 38 | 12.7 GB | 40 GB |
-| Réplica reducida, 1 GB por máquina | 9 | 9.6 GB | 19 GB |
+| Reducida, 1 GB (KVM, medido) | 9 | 6.1 GB | 4.5 GB |
+| Completo, 512 MB (KVM, medido) | 38 | 19.2 GB | 8.0 GB |
+| Completo, 1 GB (VirtualBox, estimado) | 38 | 41 GB | 77 GB |
 
-El laboratorio completo sin ajustar no cabría en nuestro equipo (30 GB): el
-recurso que limita es la memoria, no la CPU.
+Con 512 MB por máquina cabe y supera todas las pruebas, pero deja sólo 6.8 GB
+libres: el recurso que limita es la memoria, no la CPU.
 
 ### Comparación con servidores comerciales
 
-Un servidor actual de dos procesadores, como los AMD EPYC 9005 [12], alcanza
-768 hilos y varios terabytes de RAM. Con 1 TB alojaría unas 860 máquinas como
-la nuestra, unas 22 réplicas completas del laboratorio. Para servicios tan
-ligeros, los contenedores serían unas diez veces más eficientes.
+Un servidor actual con dos AMD EPYC 9005 [12] alcanza 768 hilos y varios
+terabytes de RAM: con 1 TB alojaría unas 47 copias del laboratorio completo con
+512 MB por máquina. Los contenedores serían aún más eficientes.
 
 # Virtualización de infraestructura de red con KVM
 
@@ -179,9 +176,7 @@ en cada red inferior (10.0.N.10). El anfitrión hace de PC del profesor
 (10.200.0.2). En cada red el router tiene la dirección .1; las redes de PC son
 /24 y los enlaces entre routers /30. Cada red es un *bridge* de Linux en el
 anfitrión, y las tarjetas de cada máquina se llaman `eth0`, `eth1` y `eth2` en
-el orden de su XML:
-
-![](entregables/diagrama_red_lab3103.png)
+el orden de su XML. El dibujo de la red aparece tras las tablas de enrutamiento.
 
 ## Tablas de enrutamiento
 
@@ -198,6 +193,11 @@ del plano, configuradas con FRR [9] y guardadas en `/etc/frr/frr.conf`:
 | RC | 0.0.0.0/0 | 10.2.0.1 (RB) |
 | RD | 0.0.0.0/0 | 10.3.0.1 (RB) |
 
+Este es el dibujo de nuestra red, con el bridge, la tarjeta, el puerto del
+plano y la dirección de cada conexión:
+
+![](entregables/diagrama_red_lab3103.png)
+
 ## Script de despliegue
 
 Para este apartado hemos escrito el script `despliegue.py` en Python, con la
@@ -206,15 +206,15 @@ librería lxml para los XML [7]:
 ```{.python include="parte2/despliegue.py"}
 ```
 
-A continuación se detallan sus bloques funcionales:
-
-- Plan de numeración: los diccionarios `REDES` y `VMS` definen una sola vez los bridges y las tarjetas y direcciones de cada máquina.
-- Anfitrión: carga KVM, crea los 9 bridges y da al anfitrión la dirección del PC del profesor y rutas a través de RA.
-- XML: con lxml se lee la plantilla de Moodle y se cambian el nombre, el disco y las tarjetas de red.
-- Molde: el software común (FRR, Node.js y el servidor web) se instala una sola vez con `virt-customize` [8] en un disco diferencial sobre la imagen de Moodle.
-- Disco de cada máquina: disco diferencial sobre el molde en el que se escriben su nombre, sus IP y, en los routers, sus rutas de FRR.
-- Gestión: `virsh define`, `start`, `shutdown` y `destroy`, y un `xterm` en segundo plano con la consola de cada máquina.
-- Mensajes: `print` para lo que se muestra siempre y `logging` [10] para las trazas de depuración, que sólo aparecen con `-v`.
+Sus bloques funcionales son: el plan de numeración (diccionarios `REDES` y
+`VMS`); la preparación del anfitrión (KVM, los 9 bridges y la dirección y rutas
+del PC del profesor); la generación de los XML con lxml a partir de la plantilla
+de Moodle (nombre, disco y una tarjeta por bridge); el molde, donde se instala
+una sola vez el software común con `virt-customize` [8]; el disco diferencial de
+cada máquina, con su nombre, sus IP y, en los routers, sus rutas de FRR; la
+gestión con `virsh` y `xterm`, y los mensajes con `print` y `logging` [10], cuyas
+trazas sólo aparecen con `-v`. Con `--completo` se añaden SRV2 y 7 PC más por
+red, cuya configuración de red se genera a partir del plan.
 
 ## Despliegue de la red
 
@@ -229,7 +229,7 @@ sudo ./despliegue.py crear
 El comando `crear` crea los bridges y las 9 máquinas, espera a que estén
 listas y muestra su estado:
 
-![](development/parte2/capturas/despliegue_crear.png){width="50%"}
+![](development/parte2/capturas/despliegue_crear.png){width="46%"}
 
 ## Configuración de cada máquina
 
@@ -238,17 +238,14 @@ máquina, con la misma configuración que aplica el script. En cada captura se
 ven las interfaces y las rutas de la máquina (en los routers, también la tabla
 de FRR) y, al final, el resultado de hacer ping a las 18 direcciones de la red
 y de pedir la página web al servidor. Las capturas están en este orden, de
-izquierda a derecha: RA y RB, RC y RD, el servidor y PC1, PC2 y PC3, y PC4:
+izquierda a derecha y de arriba abajo: RA, RB, RC, RD, servidor, PC1, PC2, PC3 y
+PC4:
 
-![](development/parte2/capturas/verificacion_ra.webp){width="48%"} ![](development/parte2/capturas/verificacion_rb.webp){width="48%"}
+![](development/parte2/capturas/verificacion_ra.webp){width="32%"} ![](development/parte2/capturas/verificacion_rb.webp){width="32%"} ![](development/parte2/capturas/verificacion_rc.webp){width="32%"}
 
-![](development/parte2/capturas/verificacion_rc.webp){width="48%"} ![](development/parte2/capturas/verificacion_rd.webp){width="48%"}
+![](development/parte2/capturas/verificacion_rd.webp){width="32%"} ![](development/parte2/capturas/verificacion_srv.webp){width="32%"} ![](development/parte2/capturas/verificacion_pc1.webp){width="32%"}
 
-![](development/parte2/capturas/verificacion_srv.webp){width="48%"} ![](development/parte2/capturas/verificacion_pc1.webp){width="48%"}
-
-![](development/parte2/capturas/verificacion_pc2.webp){width="48%"} ![](development/parte2/capturas/verificacion_pc3.webp){width="48%"}
-
-![](development/parte2/capturas/verificacion_pc4.webp){width="48%"}
+![](development/parte2/capturas/verificacion_pc2.webp){width="32%"} ![](development/parte2/capturas/verificacion_pc3.webp){width="32%"} ![](development/parte2/capturas/verificacion_pc4.webp){width="32%"}
 
 ## Plan de pruebas
 
@@ -263,19 +260,17 @@ sudo ./despliegue.py probar --informe /tmp/pruebas.txt
 
 El resultado son 36 pruebas correctas de 36:
 
-![](development/parte2/capturas/despliegue_probar.png){width="46%"}
+![](development/parte2/capturas/despliegue_probar.png){width="34%"}
 
-El `traceroute` desde el anfitrión hasta PC4 pasa por RA (10.200.0.1), RB
-(10.1.0.2) y RD (10.3.0.2), que es justo el camino que marcan las tablas de
+El `traceroute` hasta PC4 pasa por RA, RB y RD, el camino de las tablas de
 enrutamiento.
 
 ## Consumo, configuraciones adicionales e incidencias
 
-Las 9 máquinas ocupan 6.1 GB de RAM y 4.5 GB de disco, menos de lo estimado con
-VirtualBox. Como configuraciones adicionales, cada máquina tiene su nombre y
-acceso por SSH, y en FRR cada router tiene su nombre y una configuración que se
-vuelve a aplicar al arrancar. La principal incidencia fue que, al reiniciar la
-red de un router, se perdían las rutas de FRR y había que reiniciar FRR.
+Las 9 máquinas ocupan 6.1 GB de RAM y 4.5 GB de disco. Con `--completo`, el
+laboratorio completo (38 máquinas con 512 MB) ocupó 19.2 GB y 8 GB y superó las
+94 pruebas. Además, FRR vuelve a aplicar su configuración al arrancar, porque
+la principal incidencia fue que se perdían las rutas al reiniciar la red.
 
 # Anexo
 

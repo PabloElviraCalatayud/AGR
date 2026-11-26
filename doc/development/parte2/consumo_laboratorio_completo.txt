@@ -1,0 +1,21 @@
+Consumo del laboratorio completo (38 equipos) con 512 MB y 1 CPU por VM - 26/11/2026
+Anfitrión: AMD Ryzen 7 7700X, 30 GiB de RAM, KVM
+
+$ sudo ./despliegue.py --completo consumo
+VMs en marcha: 38   RAM asignada: 19456 MB   RAM real: 19653 MB (19.2 GiB)
+Anfitrión: 30679 MB en total, 6841 MB disponibles
+Disco: 40 ficheros qcow2, 8019 MB ocupados en /var/lib/libvirt/images/lab3103
+
+$ free -h
+               total        used        free      shared  buff/cache   available
+Mem:            29Gi        23Gi       1.4Gi        98Mi       5.9Gi       6.7Gi
+Swap:          8.0Gi       2.1Gi       5.9Gi
+
+Resumen:
+- RAM real por VM: 19653 / 38 = 517 MB (lo asignado, 512 MB, más ~1 % de QEMU).
+  Con 512 MB los invitados acaban usando toda la RAM asignada (caché de disco);
+  con 1 GB (9 VMs, versión reducida) cada una ocupaba unos 690 MB.
+- El anfitrión queda con 6.8 GB disponibles y usa 2.1 GB de swap: cabe, justo.
+- Disco: base.qcow2 (2.0 GB) + molde.qcow2 (1.2 GB) + 38 discos diferenciales
+  (unos 4.8 GB, ~125 MB por VM) = 8.0 GB.
+- Plan de pruebas: 94/94 (pruebas_laboratorio_completo.txt).
